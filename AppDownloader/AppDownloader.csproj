@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <AssemblyName>AppDownloader</AssemblyName>
+    <RootNamespace>AppDownloader</RootNamespace>
+    <ApplicationIcon />
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>disable</Nullable>
+    <LangVersion>8.0</LangVersion>
+    <Optimize>true</Optimize>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <Company>ConnorCorn07</Company>
+    <Product>App Downloader</Product>
+    <Description>Zero-dependency Windows app downloader and installer</Description>
+    <Copyright>2025</Copyright>
+    <Version>1.0.0</Version>
+    <!-- Embed everything into a single EXE -->
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>false</SelfContained>
+  </PropertyGroup>
+
+  <!-- No NuGet packages needed — pure .NET Framework 4.8 built-ins -->
+
+</Project>
