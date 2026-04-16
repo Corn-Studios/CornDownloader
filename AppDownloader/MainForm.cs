@@ -118,16 +118,14 @@ namespace AppDownloader
 
             _searchBox = new TextBox
             {
-                BackColor   = SURFACE2,
-                ForeColor   = TEXT_PRI,
-                BorderStyle = BorderStyle.FixedSingle,
-                Font        = new Font("Segoe UI", 10f),
-                Size        = new Size(260, 30),
-                Location    = new Point(220, 15)
+                PlaceholderText = "🔍  Search apps...",
+                BackColor       = SURFACE2,
+                ForeColor       = TEXT_PRI,
+                BorderStyle     = BorderStyle.FixedSingle,
+                Font            = new Font("Segoe UI", 10f),
+                Size            = new Size(260, 30),
+                Location        = new Point(220, 15)
             };
-            // .NET 4.8 placeholder via Win32 EM_SETCUEBANNER
-            _searchBox.HandleCreated += (s, e) =>
-                NativeMethods.SetCueBanner(_searchBox.Handle, "🔍  Search apps...");
             _searchBox.TextChanged += (s, e) => FilterApps(_searchBox.Text);
 
             _wingetBadge = new Label
@@ -282,19 +280,47 @@ namespace AppDownloader
                 apps = apps.Where(a => a.Name.ToLowerInvariant().Contains(search) ||
                                         a.Description.ToLowerInvariant().Contains(search));
 
-            foreach (var app in apps)
+            var appList = apps.ToList();
+
+            // Group by category and insert section headers
+            bool showHeaders = true;
+            var groups = appList.GroupBy(a => a.Category).OrderBy(g => g.Key);
+
+            foreach (var group in groups)
             {
-                if (!_tiles.TryGetValue(app, out var tile))
+                if (showHeaders)
                 {
-                    tile = new AppTile(app, SURFACE, SURFACE2, ACCENT, TEXT_PRI, TEXT_SEC, BORDER);
-                    tile.CheckedChanged += (s, e) => UpdateSelectionCount();
-                    _tiles[app] = tile;
+                    // Full-width section header
+                    var header = new SectionHeader(group.Key, CategoryEmoji(group.Key), SURFACE, TEXT_PRI, TEXT_SEC, ACCENT);
+                    _appGrid.Controls.Add(header);
                 }
-                _appGrid.Controls.Add(tile);
+
+                foreach (var app in group)
+                {
+                    if (!_tiles.TryGetValue(app, out var tile))
+                    {
+                        tile = new AppTile(app, SURFACE, SURFACE2, ACCENT, TEXT_PRI, TEXT_SEC, BORDER);
+                        tile.CheckedChanged += (s, e) => UpdateSelectionCount();
+                        _tiles[app] = tile;
+                    }
+                    _appGrid.Controls.Add(tile);
+                }
             }
 
             _appGrid.ResumeLayout(true);
         }
+
+        private static string CategoryEmoji(string cat) => cat switch
+        {
+            "Browsers"                 => "🌐",
+            "Dev Tools"                => "💻",
+            "Media & Entertainment"    => "🎬",
+            "Productivity"             => "📋",
+            "Gaming"                   => "🎮",
+            "Utilities & System Tools" => "🔧",
+            "Customization"            => "🎨",
+            _                          => "📦"
+        };
 
         private void FilterApps(string query)
         {
@@ -603,7 +629,7 @@ namespace AppDownloader
             _checkedBg  = checkedBg;
             _accentColor = accent;
 
-            Size      = new Size(210, 100);
+            Size      = new Size(230, 110);
             BackColor = normalBg;
             Margin    = new Padding(6);
             Cursor    = Cursors.Hand;
@@ -631,21 +657,25 @@ namespace AppDownloader
             var iconLbl = new Label
             {
                 Text      = app.IconChar,
-                Font      = new Font("Segoe UI Emoji", 18f),
-                AutoSize  = true,
-                Location  = new Point(10, 10),
-                BackColor = Color.Transparent
+                Font      = new Font("Segoe UI Emoji", 16f),
+                AutoSize  = false,
+                Size      = new Size(36, 36),
+                Location  = new Point(8, 8),
+                BackColor = Color.Transparent,
+                TextAlign = ContentAlignment.MiddleCenter
             };
 
             var nameLbl = new Label
             {
-                Text      = app.Name,
-                Font      = new Font("Segoe UI Semibold", 9f),
-                ForeColor = textPri,
-                AutoSize  = false,
-                Size      = new Size(170, 18),
-                Location  = new Point(48, 11),
-                BackColor = Color.Transparent
+                Text         = app.Name,
+                Font         = new Font("Segoe UI Semibold", 9f),
+                ForeColor    = textPri,
+                AutoSize     = false,
+                Size         = new Size(148, 36),
+                Location     = new Point(52, 7),
+                BackColor    = Color.Transparent,
+                AutoEllipsis = false,
+                UseMnemonic  = false
             };
 
             var descLbl = new Label
@@ -654,8 +684,8 @@ namespace AppDownloader
                 Font      = new Font("Segoe UI", 7.5f),
                 ForeColor = textSec,
                 AutoSize  = false,
-                Size      = new Size(190, 32),
-                Location  = new Point(10, 55),
+                Size      = new Size(210, 32),
+                Location  = new Point(10, 68),
                 BackColor = Color.Transparent
             };
 
@@ -675,7 +705,7 @@ namespace AppDownloader
                 ForeColor = badgeFg,
                 BackColor = badgeBg,
                 AutoSize  = true,
-                Location  = new Point(10, 37),
+                Location  = new Point(10, 48),
                 Padding   = new Padding(3, 1, 3, 1)
             };
 
@@ -686,14 +716,14 @@ namespace AppDownloader
                 ForeColor = textSec,
                 BackColor = Color.Transparent,
                 AutoSize  = true,
-                Location  = new Point(70, 40)
+                Location  = new Point(70, 51)
             };
 
             _statusDot = new Label
             {
                 Text      = "",
                 AutoSize  = true,
-                Location  = new Point(10, 82),
+                Location  = new Point(10, 92),
                 Font      = new Font("Segoe UI", 7.5f),
                 BackColor = Color.Transparent
             };
@@ -736,18 +766,46 @@ namespace AppDownloader
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    //  P/INVOKE — TextBox placeholder text for .NET 4.8
+    //  SECTION HEADER CONTROL
     // ─────────────────────────────────────────────────────────────────────────
-    internal static class NativeMethods
+    public class SectionHeader : Panel
     {
-        private const int EM_SETCUEBANNER = 0x1501;
-
-        [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
-        private static extern IntPtr SendMessage(IntPtr hWnd, int msg, int wParam, string lParam);
-
-        public static void SetCueBanner(IntPtr handle, string text)
+        public SectionHeader(string title, string emoji, Color bg, Color textPri, Color textSec, Color accent)
         {
-            SendMessage(handle, EM_SETCUEBANNER, 1, text);
+            // Full-width, fixed height — FlowLayoutPanel will give it a new row
+            Height    = 44;
+            Width     = 2000;   // wide enough to always break to its own row
+            Margin    = new Padding(6, 14, 6, 4);
+            BackColor = Color.Transparent;
+
+            // Accent left bar
+            var bar = new Panel
+            {
+                BackColor = accent,
+                Size      = new Size(3, 26),
+                Location  = new Point(4, 9)
+            };
+
+            var lbl = new Label
+            {
+                Text      = $"{emoji}  {title}",
+                Font      = new Font("Segoe UI Semibold", 11f),
+                ForeColor = textPri,
+                AutoSize  = true,
+                Location  = new Point(14, 10),
+                BackColor = Color.Transparent
+            };
+
+            // Horizontal rule
+            this.Paint += (s, e) =>
+            {
+                int lineY = Height - 4;
+                using var pen = new System.Drawing.Pen(Color.FromArgb(45, 45, 65), 1);
+                e.Graphics.DrawLine(pen, lbl.Right + 12, lineY, Width - 20, lineY);
+            };
+
+            Controls.AddRange(new Control[] { bar, lbl });
         }
     }
+
 }

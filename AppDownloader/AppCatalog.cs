@@ -25,14 +25,7 @@ namespace AppDownloader
         public static List<AppEntry> All => new List<AppEntry>
         {
             // ── BROWSERS ──────────────────────────────────────────────────────
-            new AppEntry {
-                Name = "Google Chrome", Category = "Browsers", IconChar = "🌐",
-                Description = "Fast, secure web browser by Google",
-                WingetId = "Google.Chrome",
-                DirectUrl = "https://dl.google.com/chrome/install/ChromeStandaloneSetup64.exe",
-                FileName = "ChromeSetup.exe",
-                PreferredMethod = DownloadMethod.Winget
-            },
+
             new AppEntry {
                 Name = "Mozilla Firefox", Category = "Browsers", IconChar = "🦊",
                 Description = "Privacy-focused open-source browser",
@@ -42,13 +35,14 @@ namespace AppDownloader
                 PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
-                Name = "Microsoft Edge", Category = "Browsers", IconChar = "🔷",
-                Description = "Chromium-based browser built into Windows",
-                WingetId = "Microsoft.Edge",
+                Name = "Chromium", Category = "Browsers", IconChar = "🔵",
+                Description = "Open-source base browser behind Chrome",
+                WingetId = "Hibbiki.Chromium",
                 DirectUrl = null,
                 FileName = null,
                 PreferredMethod = DownloadMethod.Winget
             },
+
             new AppEntry {
                 Name = "Brave Browser", Category = "Browsers", IconChar = "🦁",
                 Description = "Privacy-first browser with ad-blocking",
@@ -57,22 +51,8 @@ namespace AppDownloader
                 FileName = "BraveSetup.exe",
                 PreferredMethod = DownloadMethod.Winget
             },
-            new AppEntry {
-                Name = "Opera GX", Category = "Browsers", IconChar = "🎮",
-                Description = "Gaming browser with CPU/RAM limiters",
-                WingetId = "Opera.OperaGX",
-                DirectUrl = null,
-                FileName = null,
-                PreferredMethod = DownloadMethod.Winget
-            },
-            new AppEntry {
-                Name = "Vivaldi", Category = "Browsers", IconChar = "🎵",
-                Description = "Highly customizable power-user browser",
-                WingetId = "VivaldiTechnologies.Vivaldi",
-                DirectUrl = null,
-                FileName = null,
-                PreferredMethod = DownloadMethod.Winget
-            },
+
+
 
             // ── DEV TOOLS ─────────────────────────────────────────────────────
             new AppEntry {
@@ -139,14 +119,7 @@ namespace AppDownloader
                 FileName = null,
                 PreferredMethod = DownloadMethod.Winget
             },
-            new AppEntry {
-                Name = "HeidiSQL", Category = "Dev Tools", IconChar = "🗄️",
-                Description = "Lightweight database management client",
-                WingetId = "HeidiSQL.HeidiSQL",
-                DirectUrl = null,
-                FileName = null,
-                PreferredMethod = DownloadMethod.Winget
-            },
+
             new AppEntry {
                 Name = "PowerShell 7", Category = "Dev Tools", IconChar = "🔷",
                 Description = "Cross-platform task automation shell",
@@ -247,14 +220,7 @@ namespace AppDownloader
                 FileName = "SlackSetup.exe",
                 PreferredMethod = DownloadMethod.Winget
             },
-            new AppEntry {
-                Name = "Microsoft Teams", Category = "Productivity", IconChar = "👥",
-                Description = "Video conferencing and team collaboration",
-                WingetId = "Microsoft.Teams",
-                DirectUrl = null,
-                FileName = null,
-                PreferredMethod = DownloadMethod.Winget
-            },
+
             new AppEntry {
                 Name = "Zoom", Category = "Productivity", IconChar = "📞",
                 Description = "Video conferencing and online meetings",
@@ -395,22 +361,8 @@ namespace AppDownloader
                 FileName = null,
                 PreferredMethod = DownloadMethod.Winget
             },
-            new AppEntry {
-                Name = "TreeSize Free", Category = "Utilities & System Tools", IconChar = "🌳",
-                Description = "Visualize disk space usage by folder",
-                WingetId = "JAMSoftware.TreeSize.Free",
-                DirectUrl = null,
-                FileName = null,
-                PreferredMethod = DownloadMethod.Winget
-            },
-            new AppEntry {
-                Name = "Bulk Rename Utility", Category = "Utilities & System Tools", IconChar = "✏️",
-                Description = "Powerful batch file renaming tool",
-                WingetId = "BulkRenameUtility.BulkRenameUtility",
-                DirectUrl = null,
-                FileName = null,
-                PreferredMethod = DownloadMethod.Winget
-            },
+
+
             new AppEntry {
                 Name = "WinDirStat", Category = "Utilities & System Tools", IconChar = "📂",
                 Description = "Graphical disk usage analyzer",
@@ -505,6 +457,168 @@ namespace AppDownloader
                 Name = "ModernFlyouts", Category = "Customization", IconChar = "🎨",
                 Description = "Modern-styled volume/media overlay for Windows",
                 WingetId = "ModernFlyouts.ModernFlyouts",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+
+            // ── BROWSERS (additions) ──────────────────────────────────────────
+            new AppEntry {
+                Name = "Waterfox", Category = "Browsers", IconChar = "🌊",
+                Description = "Privacy-focused Firefox-based browser",
+                WingetId = "Waterfox.Waterfox",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+
+            // ── DEV TOOLS (additions) ─────────────────────────────────────────
+            new AppEntry {
+                Name = "PyPy", Category = "Dev Tools", IconChar = "🐍",
+                Description = "Fast, JIT-compiled Python interpreter",
+                WingetId = "PyPy.PyPy",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "JetBrains Toolbox", Category = "Dev Tools", IconChar = "🧰",
+                Description = "Manage all JetBrains IDEs in one place",
+                WingetId = "JetBrains.Toolbox",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "Wireshark", Category = "Dev Tools", IconChar = "🦈",
+                Description = "Network protocol analyser and packet capture",
+                WingetId = "WiresharkFoundation.Wireshark",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "BlockBench", Category = "Dev Tools", IconChar = "🟫",
+                Description = "3D model editor for Minecraft and low-poly art",
+                WingetId = "JannisX11.Blockbench",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+
+            // ── GAMING (additions) ────────────────────────────────────────────
+            new AppEntry {
+                Name = "Overwolf", Category = "Gaming", IconChar = "🐺",
+                Description = "In-game overlay platform for apps and mods",
+                WingetId = "Overwolf.Overwolf",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "Medal", Category = "Gaming", IconChar = "🥇",
+                Description = "Clip and share your best gaming moments",
+                WingetId = "Medal.Medal",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "Valorant Tracker", Category = "Gaming", IconChar = "🎯",
+                Description = "Stats tracker and overlay for Valorant",
+                WingetId = "TrackerNetwork.ValorantTracker",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "Prism Launcher", Category = "Gaming", IconChar = "🟩",
+                Description = "Open-source Minecraft launcher with mod support",
+                WingetId = "PrismLauncher.PrismLauncher",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "Minecraft Launcher", Category = "Gaming", IconChar = "⛏️",
+                Description = "Official Minecraft Java & Bedrock launcher",
+                WingetId = "Mojang.MinecraftLauncher",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+
+            // ── UTILITIES & SYSTEM TOOLS (additions) ──────────────────────────
+            new AppEntry {
+                Name = "GPU-Z", Category = "Utilities & System Tools", IconChar = "🎮",
+                Description = "GPU hardware information and diagnostics",
+                WingetId = "TechPowerUp.GPU-Z",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "Revo Uninstaller", Category = "Utilities & System Tools", IconChar = "🗑️",
+                Description = "Deep uninstaller that removes leftover files",
+                WingetId = "RevoUninstaller.RevoUninstaller",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "CDBurnerXP", Category = "Utilities & System Tools", IconChar = "💿",
+                Description = "Free CD/DVD/Blu-ray burning application",
+                WingetId = "CDBurnerXP.CDBurnerXP",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "OpenVPN", Category = "Utilities & System Tools", IconChar = "🔒",
+                Description = "Open-source VPN client and server",
+                WingetId = "OpenVPNTechnologies.OpenVPN",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "ProtonVPN", Category = "Utilities & System Tools", IconChar = "🛡️",
+                Description = "Secure, privacy-first VPN by Proton",
+                WingetId = "ProtonTechnologies.ProtonVPN",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "WireGuard", Category = "Utilities & System Tools", IconChar = "🔐",
+                Description = "Fast, modern, secure VPN tunnel",
+                WingetId = "WireGuard.WireGuard",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "Microsoft PC Manager", Category = "Utilities & System Tools", IconChar = "🖥️",
+                Description = "Microsoft's official PC cleanup and boost tool",
+                WingetId = "Microsoft.PCManager",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+
+            // ── PRODUCTIVITY (additions) ──────────────────────────────────────
+            new AppEntry {
+                Name = "FxSound", Category = "Productivity", IconChar = "🎚️",
+                Description = "Audio enhancer and equalizer for Windows",
+                WingetId = "FxSound.FxSound",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "Claude Desktop", Category = "Productivity", IconChar = "🤖",
+                Description = "Anthropic's Claude AI assistant desktop app",
+                WingetId = "Anthropic.Claude",
                 DirectUrl = null,
                 FileName = null,
                 PreferredMethod = DownloadMethod.Winget

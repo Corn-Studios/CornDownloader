@@ -1,6 +1,6 @@
 # ⬇ App Downloader
 
-A **zero-dependency** Windows app that lets you browse, select, and install popular software in one click — inspired by Ninite, built with the same clean C#/WinForms approach as Win11 Optimizer.
+A **zero-dependency** Windows app that lets you browse, select, and install popular software in one click — inspired by Ninite, built with the same clean C#/WinForms approach as [Win11 Optimizer](https://github.com/ConnorCorn07/win11op).
 
 ---
 
@@ -10,7 +10,7 @@ A **zero-dependency** Windows app that lets you browse, select, and install popu
 - **Dual install method**: winget (silent, preferred) with automatic fallback to direct download URLs
 - **Dark UI** with category sidebar, search, and per-tile status feedback
 - **Folder picker** — choose where downloaded installers are saved
-- **Zero dependencies** — targets .NET Framework 4.8 (built into Windows 10/11), no NuGet packages
+- **Zero dependencies** — targets .NET 8 (built into Windows 11, free download for Windows 10), no NuGet packages
 - **Activity log panel** — toggle to see real-time install output
 - **Per-app status** — tiles show ⏳ Installing → ✔ Done / ✘ Failed
 
@@ -20,13 +20,13 @@ A **zero-dependency** Windows app that lets you browse, select, and install popu
 
 | Category | Example Apps |
 |---|---|
-| 🌐 Browsers | Chrome, Firefox, Brave, Opera GX |
-| 💻 Dev Tools | VS Code, Git, Node.js, Python, Docker |
-| 🎬 Media & Entertainment | VLC, Spotify, OBS, Audacity |
-| 📋 Productivity | Notion, Obsidian, Zoom, LibreOffice |
-| 🎮 Gaming | Steam, Epic, Discord, GOG Galaxy |
-| 🔧 Utilities | 7-Zip, PowerToys, Everything Search |
-| 🎨 Customization | Rainmeter, Lively Wallpaper, TranslucentTB |
+| 🌐 Browsers | Chrome, Firefox, Brave, Opera GX, Vivaldi |
+| 💻 Dev Tools | VS Code, Git, Node.js, Python, Docker, PowerShell 7 |
+| 🎬 Media & Entertainment | VLC, Spotify, OBS, Audacity, HandBrake |
+| 📋 Productivity | Notion, Obsidian, Zoom, LibreOffice, ShareX |
+| 🎮 Gaming | Steam, Epic, Discord, GOG Galaxy, Playnite |
+| 🔧 Utilities & System Tools | 7-Zip, PowerToys, Everything Search, HWiNFO, Malwarebytes |
+| 🎨 Customization | Rainmeter, Lively Wallpaper, TranslucentTB, Windhawk, ModernFlyouts |
 
 ---
 
@@ -34,9 +34,9 @@ A **zero-dependency** Windows app that lets you browse, select, and install popu
 
 ### Prerequisites
 - Visual Studio 2022 (or `dotnet` CLI)
-- .NET Framework 4.8 SDK (included with VS, or downloadable)
+- .NET 8 SDK — [download here](https://dotnet.microsoft.com/en-us/download/dotnet/8.0)
 
-### Build
+### Build via CLI
 
 ```bash
 dotnet build AppDownloader.sln -c Release
@@ -44,7 +44,7 @@ dotnet build AppDownloader.sln -c Release
 
 The output `.exe` will be in:
 ```
-AppDownloader\bin\Release\net48\AppDownloader.exe
+AppDownloader\bin\Release\net8.0-windows\AppDownloader.exe
 ```
 
 ### Or open in Visual Studio
@@ -62,14 +62,27 @@ winget install --id <WingetId> --silent --accept-source-agreements --accept-pack
 ```
 
 ### Direct URL fallback
-For apps without winget IDs (or if winget is unavailable), the app downloads the installer to your chosen folder and launches it with silent flags (`/S`, `/passive`).
+For apps without a winget ID, or if winget is unavailable, the app downloads the installer directly to your chosen folder and launches it with silent flags (`/S`, `/passive`). Each `AppEntry` in the catalog can carry both a `WingetId` and a `DirectUrl` — the preferred method is configurable per-app.
 
 ---
 
 ## 🖥️ Requirements
 - Windows 10 or 11
-- .NET Framework 4.8 *(already included on Win10 1903+ and all Win11)*
-- Administrator rights (for installing apps)
+- .NET 8 Runtime *(pre-installed on most Windows 11 machines; [downloadable](https://dotnet.microsoft.com/en-us/download/dotnet/8.0) for Windows 10)*
+- Administrator rights (required to launch installers)
+
+---
+
+## 🔧 Changelog
+
+### v1.0.0
+- Initial release with 60+ apps across 7 categories
+- winget-first install with direct URL fallback
+- Dark WinForms UI: category sidebar, app grid tiles, search, folder picker
+- Per-tile install status feedback (⏳ / ✔ / ✘)
+- Toggleable activity log panel
+- Retargeted from .NET Framework 4.8 → **.NET 8** to avoid missing targeting pack errors (`NU1100`)
+- Fixed `PlaceholderText` build error (`CS0117`) — `.NET 4.8` doesn't support this property; resolved by upgrading to .NET 8 where it works natively
 
 ---
 
