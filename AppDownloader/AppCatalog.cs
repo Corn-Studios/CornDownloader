@@ -623,6 +623,38 @@ namespace AppDownloader
                 FileName = null,
                 PreferredMethod = DownloadMethod.Winget
             },
+            new AppEntry {
+                Name = "Google Chrome", Category = "Browsers", IconChar = "🌐",
+                Description = "Fast, secure web browser by Google",
+                WingetId = "Google.Chrome",
+                DirectUrl = "https://dl.google.com/chrome/install/ChromeStandaloneSetup64.exe",
+                FileName = "ChromeSetup.exe",
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "Opera GX", Category = "Browsers", IconChar = "🎮",
+                Description = "Gaming browser with CPU/RAM limiters",
+                WingetId = "Opera.OperaGX",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "Ferdium", Category = "Productivity", IconChar = "💬",
+                Description = "All-in-one messaging app (Slack, WhatsApp, etc.)",
+                WingetId = "Ferdium.Ferdium",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "Parsec", Category = "Gaming", IconChar = "🖥️",
+                Description = "Low-latency remote desktop for gaming",
+                WingetId = "Parsec.Parsec",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
         };
     }
 }

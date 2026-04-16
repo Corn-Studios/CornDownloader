@@ -290,9 +290,10 @@ namespace AppDownloader
             {
                 if (showHeaders)
                 {
-                    // Full-width section header
                     var header = new SectionHeader(group.Key, CategoryEmoji(group.Key), SURFACE, TEXT_PRI, TEXT_SEC, ACCENT);
                     _appGrid.Controls.Add(header);
+                    // Force header onto its own row; tiles start fresh on the next row
+                    _appGrid.SetFlowBreak(header, true);
                 }
 
                 foreach (var app in group)
@@ -629,7 +630,7 @@ namespace AppDownloader
             _checkedBg  = checkedBg;
             _accentColor = accent;
 
-            Size      = new Size(230, 110);
+            Size      = new Size(230, 125);
             BackColor = normalBg;
             Margin    = new Padding(6);
             Cursor    = Cursors.Hand;
@@ -684,8 +685,8 @@ namespace AppDownloader
                 Font      = new Font("Segoe UI", 7.5f),
                 ForeColor = textSec,
                 AutoSize  = false,
-                Size      = new Size(210, 32),
-                Location  = new Point(10, 68),
+                Size      = new Size(210, 28),
+                Location  = new Point(10, 70),
                 BackColor = Color.Transparent
             };
 
@@ -723,7 +724,7 @@ namespace AppDownloader
             {
                 Text      = "",
                 AutoSize  = true,
-                Location  = new Point(10, 92),
+                Location  = new Point(10, 104),
                 Font      = new Font("Segoe UI", 7.5f),
                 BackColor = Color.Transparent
             };
@@ -772,13 +773,20 @@ namespace AppDownloader
     {
         public SectionHeader(string title, string emoji, Color bg, Color textPri, Color textSec, Color accent)
         {
-            // Full-width, fixed height — FlowLayoutPanel will give it a new row
             Height    = 44;
-            Width     = 2000;   // wide enough to always break to its own row
             Margin    = new Padding(6, 14, 6, 4);
             BackColor = Color.Transparent;
+            Anchor    = AnchorStyles.Left | AnchorStyles.Right;
 
-            // Accent left bar
+            // Resize width to match parent FlowLayoutPanel's client area
+            this.ParentChanged += (s, e) =>
+            {
+                if (Parent == null) return;
+                void Sync() => Width = Parent.ClientSize.Width - Margin.Horizontal;
+                Sync();
+                Parent.ClientSizeChanged += (ps, pe) => Sync();
+            };
+
             var bar = new Panel
             {
                 BackColor = accent,
@@ -796,10 +804,9 @@ namespace AppDownloader
                 BackColor = Color.Transparent
             };
 
-            // Horizontal rule
             this.Paint += (s, e) =>
             {
-                int lineY = Height - 4;
+                int lineY = Height - 6;
                 using var pen = new System.Drawing.Pen(Color.FromArgb(45, 45, 65), 1);
                 e.Graphics.DrawLine(pen, lbl.Right + 12, lineY, Width - 20, lineY);
             };
