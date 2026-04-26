@@ -10,18 +10,23 @@ namespace CornDownloader
 {
     public class MainForm : Form
     {
-        // ── Colours ──────────────────────────────────────────────────────────
-        private static readonly Color BG          = Color.FromArgb(13, 13, 18);
-        private static readonly Color SURFACE     = Color.FromArgb(22, 22, 30);
-        private static readonly Color SURFACE2    = Color.FromArgb(30, 30, 40);
-        private static readonly Color ACCENT      = Color.FromArgb(99, 102, 241);   // indigo
-        private static readonly Color ACCENT_HOV  = Color.FromArgb(129, 132, 255);
-        private static readonly Color SUCCESS     = Color.FromArgb(34, 197, 94);
-        private static readonly Color WARNING     = Color.FromArgb(251, 191, 36);
-        private static readonly Color DANGER      = Color.FromArgb(239, 68, 68);
-        private static readonly Color TEXT_PRI    = Color.FromArgb(240, 240, 255);
-        private static readonly Color TEXT_SEC    = Color.FromArgb(140, 140, 170);
-        private static readonly Color BORDER      = Color.FromArgb(40, 40, 58);
+        // ── Colours — Corn Studios website palette ────────────────────────
+        private static readonly Color BG          = Color.FromArgb(  8,   8,  18);  // --bg:      #080812
+        private static readonly Color BG2         = Color.FromArgb( 13,  13,  32);  // --bg2:     #0d0d20
+        private static readonly Color SURFACE     = Color.FromArgb( 19,  18,  42);  // --surface: #13122a
+        private static readonly Color SURFACE2    = Color.FromArgb( 26,  24,  53);  // --surface2:#1a1835
+        private static readonly Color CARD        = Color.FromArgb( 16,  15,  34);  // --card:    #100f22
+        private static readonly Color ACCENT      = Color.FromArgb(245, 200,  66);  // --accent:  #f5c842 corn gold
+        private static readonly Color ACCENT_DIM  = Color.FromArgb(201, 153,  30);  // --accent-dim
+        private static readonly Color METEOR      = Color.FromArgb(244,  81,  30);  // --meteor:  #f4511e
+        private static readonly Color SUCCESS     = Color.FromArgb( 76, 175,  80);  // --corn-green
+        private static readonly Color DANGER      = Color.FromArgb(239,  68,  68);
+        private static readonly Color TEXT_PRI    = Color.FromArgb(240, 238, 252);  // --text:    #f0eefc
+        private static readonly Color TEXT_SEC    = Color.FromArgb(160, 157, 192);  // --text-dim:#a09dc0
+        private static readonly Color MUTED       = Color.FromArgb(101,  97, 160);  // --muted:   #6561a0
+        private static readonly Color BORDER      = Color.FromArgb( 42,  40,  80);  // --border:  #2a2850
+        private static readonly Color BORDER2     = Color.FromArgb( 61,  58, 112);  // --border2: #3d3a70
+        private static readonly Color SKY_PURPLE  = Color.FromArgb(124,  58, 237);  // --sky-purple
 
         // ── State ────────────────────────────────────────────────────────────
         private readonly DownloadManager _dm;
@@ -132,7 +137,8 @@ namespace CornDownloader
                 if (_upgradeBtn != null)
                 {
                     _upgradeBtn.Visible = count > 0;
-                    _upgradeBtn.Text    = $"⬆  Update {count} App{(count == 1 ? "" : "s")}";
+                    string plural = count == 1 ? "" : "s";
+                    _upgradeBtn.Text    = $"⬆  Update {count} App{plural}";
                 }
 
                 // Mark updatable tiles with a badge
@@ -197,7 +203,8 @@ namespace CornDownloader
 
             int remaining = _upgradeCache.Values.Count(v => v);
             _upgradeBtn.Visible = remaining > 0;
-            _upgradeBtn.Text    = remaining > 0 ? $"⬆  Update {remaining} App{(remaining == 1 ? "" : "s")}" : "";
+            string remPlural = remaining == 1 ? "" : "s";
+            _upgradeBtn.Text    = remaining > 0 ? $"⬆  Update {remaining} App{remPlural}" : "";
             _upgradeBtn.Enabled = remaining > 0;
 
             using var summary = new SummaryForm(results);
@@ -226,7 +233,7 @@ namespace CornDownloader
             this.MinimumSize   = new Size(900, 600);
             this.BackColor     = BG;
             this.ForeColor     = TEXT_PRI;
-            this.Font          = new Font("Segoe UI", 9f, FontStyle.Regular);
+            this.Font          = new Font("Courier New", 8.5f, FontStyle.Regular);
             this.StartPosition = FormStartPosition.CenterScreen;
             this.FormBorderStyle = FormBorderStyle.Sizable;
 
@@ -242,17 +249,26 @@ namespace CornDownloader
 
         private void LayoutPanels()
         {
-            int w = ClientSize.Width;
-            int h = ClientSize.Height;
-
-            int topH    = 60;
-            int botH    = 120;
-            int sideW   = 190;
-            int contentH = h - topH - botH;
+            int w        = ClientSize.Width;
+            int h        = ClientSize.Height;
+            int topH     = 60;
+            int botH     = 120;
+            int sideW    = 190;
+            int logH     = (_logPanel != null && _logPanel.Visible) ? _logPanel.Height : 0;
+            int contentH = h - topH - botH - logH;
 
             _topBar.SetBounds(0, 0, w, topH);
             _sidebar.SetBounds(0, topH, sideW, contentH);
             _mainArea.SetBounds(sideW, topH, w - sideW, contentH);
+
+            if (_logPanel != null)
+            {
+                _logPanel.SetBounds(0, topH + contentH, w, _logPanel.Height);
+                if (_logPanel.Visible)
+                    foreach (Control c in _logPanel.Controls)
+                        if (c is Button) c.Location = new Point(_logPanel.Width - 80, 4);
+            }
+
             _bottomBar.SetBounds(0, h - botH, w, botH);
         }
 
@@ -261,65 +277,73 @@ namespace CornDownloader
         {
             _topBar = new Panel { BackColor = SURFACE, Dock = DockStyle.None };
 
+            // Gold accent bar on left edge — mirrors website's section-label line
+            var accentBar = new Panel
+            {
+                BackColor = ACCENT,
+                Size      = new Size(3, 34),
+                Location  = new Point(14, 13)
+            };
+
             var titleLbl = new Label
             {
-                Text = "🌽  Corn Downloader",
-                Font = new Font("Segoe UI Semibold", 13f),
-                ForeColor = TEXT_PRI,
-                AutoSize = true,
-                Location = new Point(18, 17)
+                Text      = "🌽  CORN_DOWNLOADER",
+                Font      = new Font("Courier New", 9.5f, FontStyle.Bold),
+                ForeColor = ACCENT,
+                AutoSize  = true,
+                Location  = new Point(24, 19)
             };
 
             _searchBox = new TextBox
             {
-                PlaceholderText = "🔍  Search apps...",
-                BackColor       = SURFACE2,
+                PlaceholderText = "  search apps...",
+                BackColor       = CARD,
                 ForeColor       = TEXT_PRI,
                 BorderStyle     = BorderStyle.FixedSingle,
-                Font            = new Font("Segoe UI", 10f),
-                Size            = new Size(260, 30),
-                Location        = new Point(220, 15)
+                Font            = new Font("Courier New", 9f),
+                Size            = new Size(240, 28),
+                Location        = new Point(255, 16)
             };
             _searchBox.TextChanged += (s, e) => FilterApps(_searchBox.Text);
 
             _wingetBadge = new Label
             {
                 AutoSize  = true,
-                Font      = new Font("Segoe UI", 8.5f),
-                Location  = new Point(500, 21)
+                Font      = new Font("Courier New", 7.5f),
+                Location  = new Point(510, 21)
             };
             UpdateWingetBadge();
 
             _upgradeBtn = new Button
             {
-                Text      = "⬆  Checking updates...",
+                Text      = "⬆  UPDATES AVAILABLE",
                 AutoSize  = true,
-                BackColor = Color.FromArgb(251, 191, 36),
-                ForeColor = Color.FromArgb(10, 10, 10),
+                BackColor = METEOR,
+                ForeColor = Color.White,
                 FlatStyle = FlatStyle.Flat,
-                Font      = new Font("Segoe UI Semibold", 8.5f),
-                Location  = new Point(660, 15),
-                Height    = 28,
+                Font      = new Font("Courier New", 7.5f, FontStyle.Bold),
+                Location  = new Point(700, 14),
+                Height    = 30,
                 Visible   = false,
                 Cursor    = Cursors.Hand
             };
             _upgradeBtn.FlatAppearance.BorderSize = 0;
             _upgradeBtn.Click += OnUpgradeClicked;
 
-            _topBar.Controls.AddRange(new Control[] { titleLbl, _searchBox, _wingetBadge, _upgradeBtn });
+            _topBar.Controls.AddRange(new Control[] { accentBar, titleLbl, _searchBox, _wingetBadge, _upgradeBtn });
         }
 
         private void UpdateWingetBadge()
         {
             if (_dm.WingetAvailable)
             {
-                _wingetBadge.Text      = "✔  winget detected";
+                _wingetBadge.Text      = "✦  winget detected";
                 _wingetBadge.ForeColor = SUCCESS;
             }
             else
             {
                 _wingetBadge.Text      = "⚠  winget not found — direct URLs only";
-                _wingetBadge.ForeColor = WARNING;
+                _wingetBadge.ForeColor = METEOR;
             }
         }
 
@@ -328,36 +352,66 @@ namespace CornDownloader
         {
             _sidebar = new Panel { BackColor = SURFACE };
 
-            int y = 10;
+            // Sidebar header label — website "section-label" style
+            var sideHeader = new Label
+            {
+                Text      = "// CATEGORIES",
+                Font      = new Font("Courier New", 6.5f, FontStyle.Bold),
+                ForeColor = MUTED,
+                AutoSize  = true,
+                Location  = new Point(12, 12),
+                BackColor = Color.Transparent
+            };
+            _sidebar.Controls.Add(sideHeader);
+
+            int y = 34;
             foreach (var cat in _categories)
             {
                 var btn = CreateSidebarBtn(cat);
                 btn.Location = new Point(8, y);
                 btn.Width    = 174;
                 _sidebar.Controls.Add(btn);
-                y += 42;
+                y += 38;
             }
 
-            // Select-All / Deselect-All
-            var selAll = CreateSmallBtn("✔ Select All", ACCENT);
-            selAll.Location = new Point(8, y + 10);
-            selAll.Width    = 80;
-            selAll.Click   += (s, e) => SetAllInView(true);
-
-            var deselAll = CreateSmallBtn("✘ None", SURFACE2);
-            deselAll.Location = new Point(96, y + 10);
-            deselAll.Width    = 86;
-            deselAll.Click   += (s, e) => SetAllInView(false);
-
-            // Recommended preset button
-            var recBtn = CreateSmallBtn("⭐ Recommended", ACCENT);
-            recBtn.Location  = new Point(8, y + 46);
-            recBtn.Width     = 174;
-            recBtn.Height    = 30;
-            recBtn.Font      = new Font("Segoe UI", 8.5f, FontStyle.Bold);
-            recBtn.Click    += (s, e) =>
+            // Divider line
+            var divider = new Panel
             {
-                // Clear all first, then check recommended
+                BackColor = BORDER,
+                Size      = new Size(158, 1),
+                Location  = new Point(12, y + 6)
+            };
+            _sidebar.Controls.Add(divider);
+            y += 14;
+
+            // Select-All / Deselect-All
+            var selAll = CreateSmallBtn("✦ ALL", ACCENT);
+            selAll.Location  = new Point(8, y + 6);
+            selAll.Width     = 82;
+            selAll.ForeColor = Color.FromArgb(8, 8, 18);
+            selAll.Click    += (s, e) => SetAllInView(true);
+
+            var deselAll = CreateSmallBtn("✗ NONE", SURFACE2);
+            deselAll.Location  = new Point(98, y + 6);
+            deselAll.Width     = 84;
+            deselAll.ForeColor = TEXT_SEC;
+            deselAll.Click    += (s, e) => SetAllInView(false);
+
+            // Recommended preset button — styled like website's btn-primary
+            var recBtn = new Button
+            {
+                Text      = "★  RECOMMENDED",
+                Size      = new Size(174, 32),
+                Location  = new Point(8, y + 42),
+                BackColor = ACCENT,
+                ForeColor = Color.FromArgb(8, 8, 18),
+                FlatStyle = FlatStyle.Flat,
+                Font      = new Font("Courier New", 7f, FontStyle.Bold),
+                Cursor    = Cursors.Hand
+            };
+            recBtn.FlatAppearance.BorderSize = 0;
+            recBtn.Click += (s, e) =>
+            {
                 foreach (var kv in _tiles) kv.Value.IsChecked = false;
                 foreach (var kv in _tiles) kv.Value.IsChecked = kv.Key.IsRecommended;
                 UpdateSelectionCount();
@@ -366,12 +420,12 @@ namespace CornDownloader
             // Scan status label
             _scanStatusLabel = new Label
             {
-                Text      = _dm.WingetAvailable ? "🔍 Scanning installed apps..." : "",
-                ForeColor = TEXT_SEC,
-                Font      = new Font("Segoe UI", 7.5f),
+                Text      = _dm.WingetAvailable ? "🔍 scanning..." : "",
+                ForeColor = MUTED,
+                Font      = new Font("Courier New", 6.5f),
                 AutoSize  = false,
-                Size      = new Size(174, 28),
-                Location  = new Point(8, y + 84),
+                Size      = new Size(174, 24),
+                Location  = new Point(8, y + 82),
                 BackColor = Color.Transparent,
                 TextAlign = ContentAlignment.MiddleLeft
             };
@@ -383,7 +437,7 @@ namespace CornDownloader
         {
             string emoji = category switch
             {
-                "All"                      => "🏠",
+                "All"                      => "✦",
                 "Browsers"                 => "🌐",
                 "Dev Tools"                => "💻",
                 "Media & Entertainment"    => "🎬",
@@ -391,22 +445,35 @@ namespace CornDownloader
                 "Gaming"                   => "🎮",
                 "Utilities & System Tools" => "🔧",
                 "Customization"            => "🎨",
-                _                          => "📦"
+                _                          => "◈"
             };
 
+            bool active = _activeCategory == category;
             var btn = new Button
             {
-                Text      = $" {emoji}  {category}",
+                Text      = $"  {emoji}  {category.ToUpper()}",
                 TextAlign = ContentAlignment.MiddleLeft,
                 FlatStyle = FlatStyle.Flat,
-                BackColor = _activeCategory == category ? ACCENT : Color.Transparent,
-                ForeColor = _activeCategory == category ? Color.White : TEXT_SEC,
-                Font      = new Font("Segoe UI", 9f),
-                Height    = 36,
+                BackColor = active ? Color.FromArgb(40, 245, 200, 66) : Color.Transparent,
+                ForeColor = active ? ACCENT : TEXT_SEC,
+                Font      = new Font("Courier New", 7f, active ? FontStyle.Bold : FontStyle.Regular),
+                Height    = 32,
                 Cursor    = Cursors.Hand
             };
-            btn.FlatAppearance.BorderSize     = 0;
-            btn.FlatAppearance.MouseOverBackColor = Color.FromArgb(50, 99, 102, 241);
+            btn.FlatAppearance.BorderSize         = 0;
+            btn.FlatAppearance.BorderColor        = active ? ACCENT : Color.FromArgb(1, 1, 1, 1);
+            btn.FlatAppearance.MouseOverBackColor = Color.FromArgb(20, 245, 200, 66);
+
+            // Left gold bar for active state — painted on
+            btn.Paint += (s, e) =>
+            {
+                if (_activeCategory == category)
+                {
+                    using var b = new SolidBrush(ACCENT);
+                    e.Graphics.FillRectangle(b, 0, 4, 2, btn.Height - 8);
+                }
+            };
+
             btn.Click += (s, e) =>
             {
                 _activeCategory = category;
@@ -425,7 +492,7 @@ namespace CornDownloader
                 BackColor = bg,
                 ForeColor = Color.White,
                 FlatStyle = FlatStyle.Flat,
-                Font      = new Font("Segoe UI", 8f),
+                Font      = new Font("Courier New", 7f, FontStyle.Bold),
                 Cursor    = Cursors.Hand
             };
             btn.FlatAppearance.BorderSize = 0;
@@ -436,12 +503,18 @@ namespace CornDownloader
         {
             foreach (Control c in _sidebar.Controls)
             {
-                if (c is Button btn)
+                if (c is Button btn && btn.Text.Contains("  "))
                 {
-                    string cat = btn.Text.Substring(btn.Text.IndexOf("  ") + 2).Trim();
-                    bool active = cat == _activeCategory;
-                    btn.BackColor = active ? ACCENT : Color.Transparent;
-                    btn.ForeColor = active ? Color.White : TEXT_SEC;
+                    // Extract category from button text — format is "  emoji  CATEGORY"
+                    string raw = btn.Text.Trim();
+                    // Find the category by matching against known categories
+                    string matchedCat = _categories.FirstOrDefault(cat =>
+                        raw.EndsWith(cat.ToUpper(), StringComparison.OrdinalIgnoreCase)) ?? "";
+                    bool active = matchedCat == _activeCategory;
+                    btn.BackColor = active ? Color.FromArgb(40, 245, 200, 66) : Color.Transparent;
+                    btn.ForeColor = active ? ACCENT : TEXT_SEC;
+                    btn.Font      = new Font("Courier New", 7f, active ? FontStyle.Bold : FontStyle.Regular);
+                    btn.Invalidate();
                 }
             }
         }
@@ -456,7 +529,7 @@ namespace CornDownloader
                 AutoScroll      = true,
                 WrapContents    = true,
                 BackColor       = BG,
-                Padding         = new Padding(10),
+                Padding         = new Padding(12),
                 Dock            = DockStyle.Fill
             };
 
@@ -487,7 +560,7 @@ namespace CornDownloader
             {
                 if (showHeaders)
                 {
-                    var header = new SectionHeader(group.Key, CategoryEmoji(group.Key), SURFACE, TEXT_PRI, TEXT_SEC, ACCENT);
+                    var header = new SectionHeader(group.Key, CategoryEmoji(group.Key), CARD, TEXT_PRI, MUTED, ACCENT);
                     _appGrid.Controls.Add(header);
                     // Force header onto its own row; tiles start fresh on the next row
                     _appGrid.SetFlowBreak(header, true);
@@ -498,7 +571,7 @@ namespace CornDownloader
                     bool isNew = !_tiles.TryGetValue(app, out var tile);
                     if (isNew)
                     {
-                        tile = new AppTile(app, SURFACE, SURFACE2, ACCENT, TEXT_PRI, TEXT_SEC, BORDER);
+                        tile = new AppTile(app, CARD, SURFACE2, ACCENT, TEXT_PRI, TEXT_SEC, BORDER);
                         tile.IsChecked = app.IsRecommended;
                         tile.CheckedChanged += (s, e) => UpdateSelectionCount();
                         _tiles[app] = tile;
@@ -539,36 +612,47 @@ namespace CornDownloader
         {
             _bottomBar = new Panel { BackColor = SURFACE };
 
-            // Row 1: folder picker + options
+            // Top border line
+            _bottomBar.Paint += (s, e) =>
+            {
+                using var pen = new System.Drawing.Pen(BORDER, 1);
+                e.Graphics.DrawLine(pen, 0, 0, _bottomBar.Width, 0);
+            };
+
+            // Row 1: folder picker
             var folderLbl = new Label
             {
-                Text      = "Install / Save To:",
-                ForeColor = TEXT_SEC,
+                Text      = "// SAVE TO",
+                ForeColor = MUTED,
+                Font      = new Font("Courier New", 7f, FontStyle.Bold),
                 AutoSize  = true,
-                Location  = new Point(16, 12)
+                Location  = new Point(16, 14)
             };
 
             _folderBox = new TextBox
             {
                 Text        = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) + @"\Downloads",
-                BackColor   = SURFACE2,
+                BackColor   = CARD,
                 ForeColor   = TEXT_PRI,
                 BorderStyle = BorderStyle.FixedSingle,
-                Size        = new Size(340, 24),
-                Location    = new Point(130, 9)
+                Font        = new Font("Courier New", 8.5f),
+                Size        = new Size(320, 24),
+                Location    = new Point(110, 11)
             };
 
             _browseBtn = new Button
             {
-                Text      = "Browse",
+                Text      = "BROWSE",
                 Size      = new Size(70, 24),
-                Location  = new Point(478, 9),
+                Location  = new Point(438, 11),
                 BackColor = SURFACE2,
                 ForeColor = TEXT_SEC,
                 FlatStyle = FlatStyle.Flat,
+                Font      = new Font("Courier New", 6.5f, FontStyle.Bold),
                 Cursor    = Cursors.Hand
             };
-            _browseBtn.FlatAppearance.BorderColor = BORDER;
+            _browseBtn.FlatAppearance.BorderColor = BORDER2;
+            _browseBtn.FlatAppearance.BorderSize  = 1;
             _browseBtn.Click += (s, e) =>
             {
                 using var dlg = new FolderBrowserDialog();
@@ -578,18 +662,19 @@ namespace CornDownloader
 
             _preferWingetChk = new CheckBox
             {
-                Text      = "Prefer winget (faster, auto-installs silently)",
-                ForeColor = TEXT_SEC,
+                Text      = "prefer winget",
+                ForeColor = MUTED,
+                Font      = new Font("Courier New", 7.5f),
                 Checked   = _dm.WingetAvailable,
                 Enabled   = _dm.WingetAvailable,
                 AutoSize  = true,
-                Location  = new Point(570, 12)
+                Location  = new Point(524, 14)
             };
 
-            // Row 2: progress + buttons
+            // Row 2: progress + status
             _overallProgress = new ProgressBar
             {
-                Size     = new Size(460, 18),
+                Size     = new Size(460, 6),
                 Location = new Point(16, 50),
                 Style    = ProgressBarStyle.Continuous,
                 Minimum  = 0,
@@ -599,41 +684,45 @@ namespace CornDownloader
 
             _statusLabel = new Label
             {
-                Text      = "Ready",
-                ForeColor = TEXT_SEC,
+                Text      = "ready.",
+                ForeColor = MUTED,
+                Font      = new Font("Courier New", 7.5f),
                 AutoSize  = true,
-                Location  = new Point(16, 75)
+                Location  = new Point(16, 62)
             };
 
             _selectionCountLabel = new Label
             {
-                ForeColor = TEXT_SEC,
+                ForeColor = ACCENT,
+                Font      = new Font("Courier New", 8f, FontStyle.Bold),
                 AutoSize  = true,
-                Location  = new Point(490, 50)
+                Location  = new Point(490, 52)
             };
 
             _clearBtn = new Button
             {
-                Text      = "Clear Selection",
-                Size      = new Size(130, 36),
-                Location  = new Point(800, 45),
+                Text      = "✗ CLEAR",
+                Size      = new Size(100, 36),
+                Location  = new Point(800, 42),
                 BackColor = SURFACE2,
                 ForeColor = TEXT_SEC,
                 FlatStyle = FlatStyle.Flat,
+                Font      = new Font("Courier New", 7.5f, FontStyle.Bold),
                 Cursor    = Cursors.Hand
             };
-            _clearBtn.FlatAppearance.BorderColor = BORDER;
+            _clearBtn.FlatAppearance.BorderColor = BORDER2;
+            _clearBtn.FlatAppearance.BorderSize  = 1;
             _clearBtn.Click += (s, e) => SetAllInView(false);
 
             _installBtn = new Button
             {
-                Text      = "⬇  Install Selected",
+                Text      = "⬇  INSTALL",
                 Size      = new Size(160, 36),
-                Location  = new Point(940, 45),
+                Location  = new Point(910, 42),
                 BackColor = ACCENT,
-                ForeColor = Color.White,
+                ForeColor = Color.FromArgb(8, 8, 18),
                 FlatStyle = FlatStyle.Flat,
-                Font      = new Font("Segoe UI Semibold", 10f),
+                Font      = new Font("Courier New", 9f, FontStyle.Bold),
                 Cursor    = Cursors.Hand
             };
             _installBtn.FlatAppearance.BorderSize = 0;
@@ -642,15 +731,17 @@ namespace CornDownloader
             // Log toggle
             var logToggle = new Button
             {
-                Text      = "📋 Log",
-                Size      = new Size(70, 24),
-                Location  = new Point(935, 9),
-                BackColor = SURFACE2,
-                ForeColor = TEXT_SEC,
+                Text      = "// LOG",
+                Size      = new Size(65, 24),
+                Location  = new Point(914, 11),
+                BackColor = Color.Transparent,
+                ForeColor = MUTED,
                 FlatStyle = FlatStyle.Flat,
+                Font      = new Font("Courier New", 7f, FontStyle.Bold),
                 Cursor    = Cursors.Hand
             };
             logToggle.FlatAppearance.BorderColor = BORDER;
+            logToggle.FlatAppearance.BorderSize  = 1;
             logToggle.Click += (s, e) => ToggleLog();
 
             _bottomBar.Controls.AddRange(new Control[] {
@@ -659,36 +750,56 @@ namespace CornDownloader
                 _clearBtn, _installBtn, logToggle
             });
 
-            // Log panel (hidden by default)
+            // Log panel — terminal green on near-black, matches website code aesthetic
             _logBox = new RichTextBox
             {
-                BackColor   = Color.FromArgb(10, 10, 14),
-                ForeColor   = Color.FromArgb(100, 220, 100),
+                BackColor   = Color.FromArgb(8, 8, 18),
+                ForeColor   = ACCENT,
                 BorderStyle = BorderStyle.None,
                 ReadOnly    = true,
-                Font        = new Font("Consolas", 8.5f),
+                Font        = new Font("Courier New", 8.5f),
                 Dock        = DockStyle.Fill,
                 ScrollBars  = RichTextBoxScrollBars.Vertical
             };
 
             _logPanel = new Panel
             {
-                BackColor = Color.FromArgb(10, 10, 14),
+                BackColor = Color.FromArgb(8, 8, 18),
                 Visible   = false,
-                Dock      = DockStyle.Bottom,
                 Height    = 160
             };
+
+            // Close button inside the log panel
+            var logClose = new Button
+            {
+                Text      = "✗ CLOSE",
+                Size      = new Size(75, 22),
+                BackColor = Color.Transparent,
+                ForeColor = MUTED,
+                FlatStyle = FlatStyle.Flat,
+                Font      = new Font("Courier New", 6.5f, FontStyle.Bold),
+                Cursor    = Cursors.Hand
+            };
+            logClose.FlatAppearance.BorderSize = 0;
+            logClose.Click += (s, e) => ToggleLog();
+
+            _logBox.Dock = DockStyle.Fill;
             _logPanel.Controls.Add(_logBox);
+            _logPanel.Controls.Add(logClose);
+
+            // Add to the form — LayoutPanels positions it between mainArea and bottomBar
             this.Controls.Add(_logPanel);
         }
 
         private void ToggleLog()
         {
             _logPanel.Visible = !_logPanel.Visible;
+            LayoutPanels(); // reflow everything so log gets its own space
             if (_logPanel.Visible)
             {
+                foreach (Control c in _logPanel.Controls)
+                    if (c is Button) c.Location = new Point(_logPanel.Width - 80, 4);
                 _logPanel.BringToFront();
-                _logPanel.SetBounds(0, ClientSize.Height - _logPanel.Height, ClientSize.Width, _logPanel.Height);
             }
         }
 
@@ -803,9 +914,12 @@ namespace CornDownloader
         {
             int count = _tiles.Values.Count(t => t.IsChecked);
             if (_selectionCountLabel != null)
+            {
+                string appPlural = count == 1 ? "" : "s";
                 _selectionCountLabel.Text = count == 0
-                    ? "No apps selected"
-                    : $"{count} app{(count == 1 ? "" : "s")} selected";
+                    ? "no apps selected"
+                    : $"{count} app{appPlural} selected";
+            }
         }
 
         private void Log(string msg)
@@ -884,9 +998,9 @@ namespace CornDownloader
             var iconLbl = new Label
             {
                 Text      = app.IconChar,
-                Font      = new Font("Segoe UI Emoji", 16f),
+                Font      = new Font("Segoe UI Emoji", 15f),
                 AutoSize  = false,
-                Size      = new Size(36, 36),
+                Size      = new Size(34, 34),
                 Location  = new Point(8, 8),
                 BackColor = Color.Transparent,
                 TextAlign = ContentAlignment.MiddleCenter
@@ -895,54 +1009,58 @@ namespace CornDownloader
             var nameLbl = new Label
             {
                 Text         = app.Name,
-                Font         = new Font("Segoe UI Semibold", 9f),
+                Font         = new Font("Courier New", 9f, FontStyle.Bold),
                 ForeColor    = textPri,
                 AutoSize     = false,
-                Size         = new Size(148, 36),
-                Location     = new Point(52, 7),
+                Size         = new Size(152, 34),
+                Location     = new Point(48, 6),
                 BackColor    = Color.Transparent,
-                AutoEllipsis = false,
+                AutoEllipsis = true,
                 UseMnemonic  = false
             };
 
             var descLbl = new Label
             {
                 Text      = app.Description,
-                Font      = new Font("Segoe UI", 7.5f),
+                Font      = new Font("Segoe UI", 7f),
                 ForeColor = textSec,
                 AutoSize  = false,
-                Size      = new Size(210, 28),
-                Location  = new Point(10, 70),
+                Size      = new Size(210, 26),
+                Location  = new Point(10, 72),
                 BackColor = Color.Transparent
             };
 
+            // Method badge — website "tag" style with border
             string method  = app.WingetId != null ? "winget" : "direct";
-            Color  badgeBg = app.WingetId != null
-                ? Color.FromArgb(30, 99, 102, 241)
-                : Color.FromArgb(30, 251, 191, 36);
             Color  badgeFg = app.WingetId != null
-                ? Color.FromArgb(160, 165, 255)
-                : Color.FromArgb(251, 191, 36);
+                ? Color.FromArgb(245, 200, 66)   // gold for winget
+                : Color.FromArgb(160, 157, 192);  // muted for direct
 
             var methodBadge = new Label
             {
                 Text      = method,
-                Font      = new Font("Segoe UI", 7f),
+                Font      = new Font("Courier New", 6f),
                 ForeColor = badgeFg,
-                BackColor = badgeBg,
+                BackColor = Color.Transparent,
                 AutoSize  = true,
-                Location  = new Point(10, 48),
-                Padding   = new Padding(3, 1, 3, 1)
+                Location  = new Point(10, 50),
+                Padding   = new Padding(2, 1, 2, 1)
+            };
+            // Draw border on badge via Paint
+            methodBadge.Paint += (s, e) =>
+            {
+                using var pen = new System.Drawing.Pen(Color.FromArgb(61, 58, 112), 1);
+                e.Graphics.DrawRectangle(pen, 0, 0, methodBadge.Width - 1, methodBadge.Height - 1);
             };
 
             var catBadge = new Label
             {
-                Text      = app.Category,
-                Font      = new Font("Segoe UI", 6.5f),
-                ForeColor = textSec,
+                Text      = app.Category.ToUpper(),
+                Font      = new Font("Courier New", 5.5f),
+                ForeColor = Color.FromArgb(101, 97, 160),
                 BackColor = Color.Transparent,
                 AutoSize  = true,
-                Location  = new Point(70, 51)
+                Location  = new Point(methodBadge.PreferredWidth + 16, 52)
             };
 
             _statusDot = new Label
@@ -950,17 +1068,17 @@ namespace CornDownloader
                 Text      = "",
                 AutoSize  = true,
                 Location  = new Point(10, 104),
-                Font      = new Font("Segoe UI", 7.5f),
+                Font      = new Font("Courier New", 7f),
                 BackColor = Color.Transparent
             };
 
             _updateBadge = new Label
             {
-                Text      = "⬆ Update available",
+                Text      = "⬆ update available",
                 AutoSize  = true,
                 Location  = new Point(10, 104),
-                Font      = new Font("Segoe UI", 7.5f),
-                ForeColor = Color.FromArgb(251, 191, 36),
+                Font      = new Font("Courier New", 6.5f),
+                ForeColor = Color.FromArgb(244, 81, 30),
                 BackColor = Color.Transparent,
                 Visible   = false
             };
@@ -978,7 +1096,7 @@ namespace CornDownloader
             descLbl.Click  += Toggle;
             catBadge.Click += Toggle;
 
-            this.MouseEnter += (s, e) => { if (!_checked) BackColor = Color.FromArgb(28, 28, 38); };
+            this.MouseEnter += (s, e) => { if (!_checked) BackColor = Color.FromArgb(19, 18, 45); };
             this.MouseLeave += (s, e) => { if (!_checked) BackColor = _normalBg; };
         }
 
@@ -1028,29 +1146,23 @@ namespace CornDownloader
     {
         public SectionHeader(string title, string emoji, Color bg, Color textPri, Color textSec, Color accent)
         {
-            Height    = 44;
-            Margin    = new Padding(6, 14, 6, 4);
+            Height    = 48;
+            Margin    = new Padding(6, 18, 6, 4);
             BackColor = Color.Transparent;
             Anchor    = AnchorStyles.Left | AnchorStyles.Right;
 
-            // Track the last parent so we can unsubscribe cleanly
             Control _lastParent = null;
             EventHandler syncHandler = null;
-
             syncHandler = (ps, pe) =>
             {
                 if (_lastParent != null)
                     Width = _lastParent.ClientSize.Width - Margin.Horizontal;
             };
-
             this.ParentChanged += (s, e) =>
             {
-                // Unsubscribe from previous parent
                 if (_lastParent != null)
                     _lastParent.ClientSizeChanged -= syncHandler;
-
                 _lastParent = Parent;
-
                 if (_lastParent != null)
                 {
                     Width = _lastParent.ClientSize.Width - Margin.Horizontal;
@@ -1058,28 +1170,31 @@ namespace CornDownloader
                 }
             };
 
+            // Gold left bar — website "section-label" style
             var bar = new Panel
             {
                 BackColor = accent,
-                Size      = new Size(3, 26),
-                Location  = new Point(4, 9)
+                Size      = new Size(2, 22),
+                Location  = new Point(4, 13)
             };
 
+            // Monospace label — mirrors website's "01 — Projects" style
             var lbl = new Label
             {
-                Text      = $"{emoji}  {title}",
-                Font      = new Font("Segoe UI Semibold", 11f),
-                ForeColor = textPri,
+                Text      = $"{emoji}  {title.ToUpper()}",
+                Font      = new Font("Courier New", 8.5f, FontStyle.Bold),
+                ForeColor = accent,
                 AutoSize  = true,
-                Location  = new Point(14, 10),
+                Location  = new Point(12, 14),
                 BackColor = Color.Transparent
             };
 
             this.Paint += (s, e) =>
             {
-                int lineY = Height - 6;
-                using var pen = new System.Drawing.Pen(Color.FromArgb(45, 45, 65), 1);
-                e.Graphics.DrawLine(pen, lbl.Right + 12, lineY, Width - 20, lineY);
+                // Gradient line after the label — matches website's ::after line
+                int lineY = Height / 2 + 2;
+                using var pen = new System.Drawing.Pen(Color.FromArgb(42, 40, 80), 1);
+                e.Graphics.DrawLine(pen, lbl.Right + 14, lineY, Width - 20, lineY);
             };
 
             Controls.AddRange(new Control[] { bar, lbl });
@@ -1108,12 +1223,12 @@ namespace CornDownloader
             int ok   = results.Count(r => r.Status == InstallStatus.Success);
             int fail = results.Count(r => r.Status == InstallStatus.Failed);
 
-            Text             = "Installation Summary";
-            Size             = new Size(540, 520);
+            Text             = "// INSTALL SUMMARY";
+            Size             = new Size(560, 540);
             MinimumSize      = new Size(440, 400);
             BackColor        = BG;
             ForeColor        = TEXT_PRI;
-            Font             = new Font("Segoe UI", 9f);
+            Font             = new Font("Courier New", 8.5f);
             StartPosition    = FormStartPosition.CenterParent;
             FormBorderStyle  = FormBorderStyle.FixedDialog;
             MaximizeBox      = false;
@@ -1127,10 +1242,11 @@ namespace CornDownloader
             };
 
             bool allOk = fail == 0;
+            string instPlural = fail == 1 ? "" : "s";
             var titleLbl = new Label
             {
-                Text      = allOk ? "✔  All apps installed!" : $"⚠  {fail} installation{(fail == 1 ? "" : "s")} failed",
-                Font      = new Font("Segoe UI Semibold", 13f),
+                Text      = allOk ? "✔  All apps installed!" : $"⚠  {fail} installation{instPlural} failed",
+                Font      = new Font("Courier New", 11f, FontStyle.Bold),
                 ForeColor = allOk ? SUCCESS : DANGER,
                 AutoSize  = true,
                 Location  = new Point(18, 14)
@@ -1139,7 +1255,7 @@ namespace CornDownloader
             var subLbl = new Label
             {
                 Text      = $"{ok} succeeded   •   {fail} failed   •   {results.Count} total",
-                Font      = new Font("Segoe UI", 9f),
+                Font      = new Font("Courier New", 8.5f),
                 ForeColor = TEXT_SEC,
                 AutoSize  = true,
                 Location  = new Point(20, 42)
@@ -1222,7 +1338,7 @@ namespace CornDownloader
                     BackColor = DANGER,
                     ForeColor = Color.White,
                     FlatStyle = FlatStyle.Flat,
-                    Font      = new Font("Segoe UI Semibold", 9f),
+                    Font      = new Font("Courier New", 8.5f, FontStyle.Bold),
                     Cursor    = Cursors.Hand
                 };
                 retryBtn.FlatAppearance.BorderSize = 0;
@@ -1237,7 +1353,7 @@ namespace CornDownloader
         private Label MakeSectionLabel(string text, Color color, int y) => new Label
         {
             Text      = text.ToUpperInvariant(),
-            Font      = new Font("Segoe UI Semibold", 7.5f),
+            Font      = new Font("Courier New", 7f, FontStyle.Bold),
             ForeColor = color,
             AutoSize  = true,
             Top       = y,
@@ -1275,7 +1391,7 @@ namespace CornDownloader
             var nameLbl = new Label
             {
                 Text      = name,
-                Font      = new Font("Segoe UI", 9f),
+                Font      = new Font("Courier New", 8.5f),
                 ForeColor = TEXT_PRI,
                 AutoSize  = true,
                 Location  = new Point(36, 8),
@@ -1285,7 +1401,7 @@ namespace CornDownloader
             var statusLbl = new Label
             {
                 Text      = statusText,
-                Font      = new Font("Segoe UI", 8f),
+                Font      = new Font("Courier New", 7.5f),
                 ForeColor = statusColor,
                 AutoSize  = true,
                 BackColor = Color.Transparent

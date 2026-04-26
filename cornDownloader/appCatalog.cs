@@ -665,6 +665,220 @@ namespace CornDownloader
                 FileName = null,
                 PreferredMethod = DownloadMethod.Winget
             },
+
+            // ── BROWSERS (new) ────────────────────────────────────────────────
+            new AppEntry {
+                Name = "Tor Browser", Category = "Browsers", IconChar = "🧅",
+                Description = "Privacy browser that routes traffic through the Tor network",
+                WingetId = "TorProject.TorBrowser",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+
+            // ── DEV TOOLS (new) ───────────────────────────────────────────────
+            new AppEntry {
+                Name = "Neovim", Category = "Dev Tools", IconChar = "📝",
+                Description = "Hyperextensible Vim-based text editor",
+                WingetId = "Neovim.Neovim",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "WSL (Windows Subsystem for Linux)", Category = "Dev Tools", IconChar = "🐧",
+                Description = "Run Linux distributions natively on Windows",
+                WingetId = "Microsoft.WSL",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "Insomnia", Category = "Dev Tools", IconChar = "😴",
+                Description = "Open source API client and design platform",
+                WingetId = "Insomnia.Insomnia",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "FileZilla", Category = "Dev Tools", IconChar = "📁",
+                Description = "Fast and reliable FTP, FTPS and SFTP client",
+                WingetId = "TimKosse.FileZilla.Client",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "HeidiSQL", Category = "Dev Tools", IconChar = "🗄️",
+                Description = "Lightweight GUI for MySQL, MariaDB, PostgreSQL and more",
+                WingetId = "HeidiSQL.HeidiSQL",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+
+            // ── MEDIA & ENTERTAINMENT (new) ───────────────────────────────────
+            new AppEntry {
+                Name = "Plex", Category = "Media & Entertainment", IconChar = "📺",
+                Description = "Media server and player for your personal collection",
+                WingetId = "Plex.Plex",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "Stremio", Category = "Media & Entertainment", IconChar = "🎞️",
+                Description = "Streaming aggregator for movies, shows and web channels",
+                WingetId = "Stremio.Stremio",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "foobar2000", Category = "Media & Entertainment", IconChar = "🎵",
+                Description = "Highly customizable audiophile music player",
+                WingetId = "PeterPawlowski.foobar2000",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "ImageGlass", Category = "Media & Entertainment", IconChar = "🖼️",
+                Description = "Lightweight, versatile image viewer for Windows",
+                WingetId = "DuongDieuPhap.ImageGlass",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+
+            // ── PRODUCTIVITY (new) ────────────────────────────────────────────
+            new AppEntry {
+                Name = "Bitwarden", Category = "Productivity", IconChar = "🔑",
+                Description = "Free and open source password manager",
+                WingetId = "Bitwarden.Bitwarden",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "Thunderbird", Category = "Productivity", IconChar = "⚡",
+                Description = "Free and open source email client by Mozilla",
+                WingetId = "Mozilla.Thunderbird",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "Stretchly", Category = "Productivity", IconChar = "🧘",
+                Description = "Break time reminder app to reduce eye strain",
+                WingetId = "Stretchly.Stretchly",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "Greenshot", Category = "Productivity", IconChar = "📸",
+                Description = "Lightweight screenshot tool with annotation support",
+                WingetId = "Greenshot.Greenshot",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+
+            // ── GAMING (new) ──────────────────────────────────────────────────
+            new AppEntry {
+                Name = "Sunshine", Category = "Gaming", IconChar = "☀️",
+                Description = "Self-hosted game streaming host (pairs with Moonlight/Parsec)",
+                WingetId = "LizardByte.Sunshine",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "Xbox App", Category = "Gaming", IconChar = "🎮",
+                Description = "Microsoft's official Xbox PC gaming app",
+                WingetId = "Microsoft.GamingApp",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "Heroic Games Launcher", Category = "Gaming", IconChar = "🦸",
+                Description = "Open source Epic Games and GOG launcher alternative",
+                WingetId = "HeroicGamesLauncher.HeroicGamesLauncher",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+
+            // ── UTILITIES & SYSTEM TOOLS (new) ────────────────────────────────
+            new AppEntry {
+                Name = "Bulk Rename Utility", Category = "Utilities & System Tools", IconChar = "✏️",
+                Description = "Powerful batch file renaming tool for power users",
+                WingetId = "TGRMN.BulkRenameUtility",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "Process Hacker", Category = "Utilities & System Tools", IconChar = "⚙️",
+                Description = "Advanced process viewer and system monitor",
+                WingetId = "ProcessHacker.ProcessHacker",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "Ventoy", Category = "Utilities & System Tools", IconChar = "💽",
+                Description = "Create bootable USB drives for multiple ISOs at once",
+                WingetId = "Ventoy.Ventoy",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "Rufus", Category = "Utilities & System Tools", IconChar = "🔥",
+                Description = "Create bootable USB drives from ISO files",
+                WingetId = "Rufus.Rufus",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "EqualizerAPO", Category = "Utilities & System Tools", IconChar = "🎚️",
+                Description = "System-wide parametric audio equalizer for Windows",
+                WingetId = "EqualizerAPO.EqualizerAPO",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "NanaZip", Category = "Utilities & System Tools", IconChar = "🗜️",
+                Description = "Modern 7-Zip fork with Windows 11 context menu integration",
+                WingetId = "M2Team.NanaZip",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+
+            // ── CUSTOMIZATION (new) ───────────────────────────────────────────
+            new AppEntry {
+                Name = "Komorebi", Category = "Customization", IconChar = "🪟",
+                Description = "Tiling window manager for Windows",
+                WingetId = "LGUG2Z.komorebi",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "GlazeWM", Category = "Customization", IconChar = "✨",
+                Description = "Tiling window manager inspired by i3wm",
+                WingetId = "glzr-io.glazewm",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
         };
     }
 }
