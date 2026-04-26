@@ -6,7 +6,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
-namespace AppDownloader
+namespace CornDownloader
 {
     public class MainForm : Form
     {
@@ -30,6 +30,7 @@ namespace AppDownloader
         private string _activeCategory = "All";
         private bool _isInstalling = false;
         private readonly Dictionary<AppEntry, bool> _installedCache = new Dictionary<AppEntry, bool>();
+        private readonly Dictionary<AppEntry, bool> _upgradeCache   = new Dictionary<AppEntry, bool>();
 
         // ── Controls ─────────────────────────────────────────────────────────
         private Panel        _sidebar;
@@ -65,7 +66,10 @@ namespace AppDownloader
             PopulateApps("All");
             UpdateSelectionCount();
             _ = ScanInstalledAsync(); // fire-and-forget background scan
+            _ = ScanUpgradesAsync();  // fire-and-forget upgrade scan
         }
+
+        private Button       _upgradeBtn;
 
         // ─────────────────────────────────────────────────────────────────────
         //  INSTALLED DETECTION
@@ -110,6 +114,97 @@ namespace AppDownloader
         }
 
         // ─────────────────────────────────────────────────────────────────────
+        //  UPGRADE DETECTION
+        // ─────────────────────────────────────────────────────────────────────
+        private async Task ScanUpgradesAsync()
+        {
+            if (!_dm.WingetAvailable) return;
+
+            var updatableIds = await _dm.GetAvailableUpdatesAsync();
+
+            foreach (var app in AppCatalog.All)
+                _upgradeCache[app] = !string.IsNullOrEmpty(app.WingetId) &&
+                                     updatableIds.Contains(app.WingetId);
+
+            this.Invoke((Action)(() =>
+            {
+                int count = _upgradeCache.Values.Count(v => v);
+                if (_upgradeBtn != null)
+                {
+                    _upgradeBtn.Visible = count > 0;
+                    _upgradeBtn.Text    = $"⬆  Update {count} App{(count == 1 ? "" : "s")}";
+                }
+
+                // Mark updatable tiles with a badge
+                foreach (var kv in _tiles)
+                {
+                    if (_upgradeCache.TryGetValue(kv.Key, out bool hasUpdate))
+                        kv.Value.SetHasUpdate(hasUpdate);
+                }
+            }));
+        }
+
+        private async void OnUpgradeClicked(object sender, EventArgs e)
+        {
+            if (_isInstalling) return;
+
+            var toUpgrade = _upgradeCache
+                .Where(kv => kv.Value)
+                .Select(kv => kv.Key)
+                .ToList();
+
+            if (toUpgrade.Count == 0) return;
+
+            _isInstalling       = true;
+            _upgradeBtn.Enabled = false;
+            _upgradeBtn.Text    = "⏳ Updating...";
+            _installBtn.Enabled = false;
+            _overallProgress.Maximum = toUpgrade.Count;
+            _overallProgress.Value   = 0;
+            int done = 0;
+
+            Log($"[UPGRADE] Upgrading {toUpgrade.Count} app(s) — {DateTime.Now:HH:mm:ss}");
+
+            var results = new List<InstallResult>();
+            foreach (var app in toUpgrade)
+            {
+                var result = await _dm.UpgradeAsync(app, msg =>
+                    this.Invoke((Action)(() =>
+                    {
+                        _statusLabel.Text = $"{app.Name}: {msg}";
+                        Log($"[{app.Name}] {msg}");
+                    })));
+
+                results.Add(result);
+                done++;
+                this.Invoke((Action)(() =>
+                {
+                    _overallProgress.Value = done;
+                    if (_tiles.TryGetValue(app, out var tile))
+                        tile.SetStatus(result.Status);
+                    if (result.Status == InstallStatus.Success)
+                        _upgradeCache[app] = false;
+                }));
+            }
+
+            _isInstalling       = false;
+            _installBtn.Enabled = true;
+
+            int ok   = results.Count(r => r.Status == InstallStatus.Success);
+            int fail = results.Count(r => r.Status == InstallStatus.Failed);
+            _statusLabel.Text = $"Updates done — {ok} succeeded, {fail} failed.";
+            Log($"[UPGRADE DONE] {ok}/{toUpgrade.Count} — {DateTime.Now:HH:mm:ss}");
+
+            int remaining = _upgradeCache.Values.Count(v => v);
+            _upgradeBtn.Visible = remaining > 0;
+            _upgradeBtn.Text    = remaining > 0 ? $"⬆  Update {remaining} App{(remaining == 1 ? "" : "s")}" : "";
+            _upgradeBtn.Enabled = remaining > 0;
+
+            using var summary = new SummaryForm(results);
+            summary.ShowDialog(this);
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
         //  RECOMMENDED PRESET
         // ─────────────────────────────────────────────────────────────────────
         private void ApplyRecommendedPreset()
@@ -126,7 +221,7 @@ namespace AppDownloader
         // ─────────────────────────────────────────────────────────────────────
         private void InitializeComponent()
         {
-            this.Text          = "App Downloader";
+            this.Text          = "Corn Downloader";
             this.Size          = new Size(1180, 760);
             this.MinimumSize   = new Size(900, 600);
             this.BackColor     = BG;
@@ -168,7 +263,7 @@ namespace AppDownloader
 
             var titleLbl = new Label
             {
-                Text = "⬇  App Downloader",
+                Text = "🌽  Corn Downloader",
                 Font = new Font("Segoe UI Semibold", 13f),
                 ForeColor = TEXT_PRI,
                 AutoSize = true,
@@ -195,7 +290,23 @@ namespace AppDownloader
             };
             UpdateWingetBadge();
 
-            _topBar.Controls.AddRange(new Control[] { titleLbl, _searchBox, _wingetBadge });
+            _upgradeBtn = new Button
+            {
+                Text      = "⬆  Checking updates...",
+                AutoSize  = true,
+                BackColor = Color.FromArgb(251, 191, 36),
+                ForeColor = Color.FromArgb(10, 10, 10),
+                FlatStyle = FlatStyle.Flat,
+                Font      = new Font("Segoe UI Semibold", 8.5f),
+                Location  = new Point(660, 15),
+                Height    = 28,
+                Visible   = false,
+                Cursor    = Cursors.Hand
+            };
+            _upgradeBtn.FlatAppearance.BorderSize = 0;
+            _upgradeBtn.Click += OnUpgradeClicked;
+
+            _topBar.Controls.AddRange(new Control[] { titleLbl, _searchBox, _wingetBadge, _upgradeBtn });
         }
 
         private void UpdateWingetBadge()
@@ -716,9 +827,11 @@ namespace AppDownloader
     {
         private bool _checked;
         private bool _isInstalled = false;
+        private bool _hasUpdate   = false;
         private readonly Color _normalBg;
         private readonly Color _checkedBg;
         private readonly Label _statusDot;
+        private Label _updateBadge;
 
         public event EventHandler CheckedChanged;
 
@@ -841,7 +954,18 @@ namespace AppDownloader
                 BackColor = Color.Transparent
             };
 
-            Controls.AddRange(new Control[] { iconLbl, nameLbl, descLbl, methodBadge, catBadge, _statusDot });
+            _updateBadge = new Label
+            {
+                Text      = "⬆ Update available",
+                AutoSize  = true,
+                Location  = new Point(10, 104),
+                Font      = new Font("Segoe UI", 7.5f),
+                ForeColor = Color.FromArgb(251, 191, 36),
+                BackColor = Color.Transparent,
+                Visible   = false
+            };
+
+            Controls.AddRange(new Control[] { iconLbl, nameLbl, descLbl, methodBadge, catBadge, _statusDot, _updateBadge });
 
             void Toggle(object s, EventArgs e)
             {
@@ -883,6 +1007,17 @@ namespace AppDownloader
         {
             _isInstalled = installed;
             // TODO: visual treatment for installed state
+        }
+
+        public void SetHasUpdate(bool hasUpdate)
+        {
+            _hasUpdate = hasUpdate;
+            if (_updateBadge != null)
+            {
+                _updateBadge.Visible = hasUpdate;
+                _statusDot.Visible   = !hasUpdate;
+            }
+            Invalidate();
         }
     }
 

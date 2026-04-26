@@ -6,15 +6,15 @@
   "compilationOptions": {},
   "targets": {
     ".NETCoreApp,Version=v8.0": {
-      "AppDownloader/1.0.0": {
+      "CornDownloader/1.1.0": {
         "runtime": {
-          "AppDownloader.dll": {}
+          "CornDownloader.dll": {}
         }
       }
     }
   },
   "libraries": {
-    "AppDownloader/1.0.0": {
+    "CornDownloader/1.1.0": {
       "type": "project",
       "serviceable": false,
       "sha512": ""

@@ -1,7 +1,7 @@
 using System;
 using System.Windows.Forms;
 
-namespace AppDownloader
+namespace CornDownloader
 {
     static class Program
     {

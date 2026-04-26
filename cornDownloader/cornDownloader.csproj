@@ -3,18 +3,18 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
-    <AssemblyName>AppDownloader</AssemblyName>
-    <RootNamespace>AppDownloader</RootNamespace>
+    <AssemblyName>CornDownloader</AssemblyName>
+    <RootNamespace>CornDownloader</RootNamespace>
     <UseWindowsForms>true</UseWindowsForms>
     <Nullable>disable</Nullable>
     <LangVersion>latest</LangVersion>
     <Optimize>true</Optimize>
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
     <Company>ConnorCorn07</Company>
-    <Product>App Downloader</Product>
-    <Description>Zero-dependency Windows app downloader and installer</Description>
+    <Product>Corn Downloader</Product>
+    <Description>Zero-dependency Windows app downloader and installer by Corn Studios</Description>
     <Copyright>2025</Copyright>
-    <Version>1.0.0</Version>
+    <Version>1.1.0</Version>
     <ImplicitUsings>disable</ImplicitUsings>
   </PropertyGroup>
 

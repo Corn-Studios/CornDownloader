@@ -6,7 +6,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Threading.Tasks;
 
-namespace AppDownloader
+namespace CornDownloader
 {
     public enum InstallStatus
     {
@@ -111,6 +111,127 @@ namespace AppDownloader
             }
 
             return installed;
+        }
+
+        /// <summary>
+        /// Runs 'winget upgrade' and returns a HashSet of winget IDs that have updates available.
+        /// </summary>
+        public async Task<HashSet<string>> GetAvailableUpdatesAsync()
+        {
+            var updatable = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (!WingetAvailable) return updatable;
+
+            string tempFile = Path.Combine(Path.GetTempPath(), $"corndownloader_upgrades_{Guid.NewGuid():N}.json");
+
+            try
+            {
+                // Export upgradeable packages to JSON — same reliable approach as installed scan
+                var psi = new ProcessStartInfo
+                {
+                    FileName               = "winget",
+                    Arguments              = $"upgrade --accept-source-agreements",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError  = true,
+                    UseShellExecute        = false,
+                    CreateNoWindow         = true,
+                    StandardOutputEncoding = System.Text.Encoding.UTF8
+                };
+
+                var tcs    = new TaskCompletionSource<bool>();
+                var proc   = new Process { StartInfo = psi, EnableRaisingEvents = true };
+                var output = new System.Text.StringBuilder();
+
+                proc.OutputDataReceived += (s, e) =>
+                {
+                    if (e.Data != null) output.AppendLine(e.Data);
+                };
+                proc.Exited += (s, e) => tcs.TrySetResult(true);
+                proc.Start();
+                proc.BeginOutputReadLine();
+                proc.BeginErrorReadLine();
+
+                await Task.WhenAny(tcs.Task, Task.Delay(20000));
+
+                // Strip non-ASCII chars and match catalog IDs
+                var clean = new System.Text.StringBuilder();
+                foreach (char c in output.ToString())
+                    if (c == '\n' || c == '\r' || (c >= 32 && c <= 126))
+                        clean.Append(c);
+
+                string cleanOutput = clean.ToString();
+
+                foreach (var app in AppCatalog.All)
+                {
+                    if (string.IsNullOrEmpty(app.WingetId)) continue;
+                    if (cleanOutput.IndexOf(app.WingetId, StringComparison.OrdinalIgnoreCase) >= 0)
+                        updatable.Add(app.WingetId);
+                }
+            }
+            catch { }
+            finally
+            {
+                try { if (File.Exists(tempFile)) File.Delete(tempFile); } catch { }
+            }
+
+            return updatable;
+        }
+
+        /// <summary>
+        /// Upgrades an already-installed app via winget upgrade.
+        /// </summary>
+        public async Task<InstallResult> UpgradeAsync(AppEntry app, Action<string> onProgress)
+        {
+            var result = new InstallResult { App = app, Status = InstallStatus.Installing };
+            onProgress?.Invoke($"Upgrading {app.Name}...");
+
+            try
+            {
+                var tcs = new TaskCompletionSource<bool>();
+                var psi = new ProcessStartInfo
+                {
+                    FileName               = "winget",
+                    Arguments              = $"upgrade --id {app.WingetId} --silent --accept-source-agreements --accept-package-agreements",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError  = true,
+                    UseShellExecute        = false,
+                    CreateNoWindow         = true
+                };
+
+                var proc   = new Process { StartInfo = psi, EnableRaisingEvents = true };
+                var output = new System.Text.StringBuilder();
+
+                proc.OutputDataReceived += (s, e) =>
+                {
+                    if (!string.IsNullOrEmpty(e.Data))
+                    {
+                        output.AppendLine(e.Data);
+                        onProgress?.Invoke(e.Data);
+                    }
+                };
+                proc.Exited += (s, e) => tcs.TrySetResult(true);
+                proc.Start();
+                proc.BeginOutputReadLine();
+                proc.BeginErrorReadLine();
+                await tcs.Task;
+
+                if (proc.ExitCode == 0 || proc.ExitCode == -1978335189)
+                {
+                    result.Status  = InstallStatus.Success;
+                    result.Message = $"{app.Name} upgraded successfully.";
+                }
+                else
+                {
+                    result.Status  = InstallStatus.Failed;
+                    result.Message = $"winget upgrade exited with code {proc.ExitCode}.";
+                }
+            }
+            catch (Exception ex)
+            {
+                result.Status  = InstallStatus.Failed;
+                result.Message = ex.Message;
+            }
+
+            return result;
         }
 
         public async Task<InstallResult> InstallAsync(
@@ -222,7 +343,7 @@ namespace AppDownloader
 
             try
             {
-                _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("AppDownloader/1.0");
+                _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("CornDownloader/1.0");
 
                 using (var response = await _httpClient.GetAsync(app.DirectUrl, HttpCompletionOption.ResponseHeadersRead))
                 {
@@ -267,11 +388,13 @@ namespace AppDownloader
                     };
 
                 var proc = Process.Start(psi);
-
                 await Task.Run(() => proc.WaitForExit());
 
-                result.Status = InstallStatus.Success;
-                result.Message = $"Installer ran. File saved to: {destPath}";
+                result.Status  = InstallStatus.Success;
+                result.Message = $"Installer ran successfully.";
+
+                // Clean up — delete the installer file after a successful run
+                try { if (File.Exists(destPath)) File.Delete(destPath); } catch { }
             }
             catch (Exception ex)
             {

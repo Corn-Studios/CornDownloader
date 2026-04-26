@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace AppDownloader
+namespace CornDownloader
 {
     public enum DownloadMethod
     {
