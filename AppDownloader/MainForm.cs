@@ -384,16 +384,14 @@ namespace AppDownloader
 
                 foreach (var app in group)
                 {
-                    if (!_tiles.TryGetValue(app, out var tile))
+                    bool isNew = !_tiles.TryGetValue(app, out var tile);
+                    if (isNew)
                     {
                         tile = new AppTile(app, SURFACE, SURFACE2, ACCENT, TEXT_PRI, TEXT_SEC, BORDER);
                         tile.IsChecked = app.IsRecommended;
                         tile.CheckedChanged += (s, e) => UpdateSelectionCount();
                         _tiles[app] = tile;
                     }
-                    // Apply cached installed state if scan has results
-                    if (_installedCache.TryGetValue(app, out bool installed))
-                        tile.SetInstalled(installed);
                     _appGrid.Controls.Add(tile);
                 }
             }
@@ -720,13 +718,7 @@ namespace AppDownloader
         private bool _isInstalled = false;
         private readonly Color _normalBg;
         private readonly Color _checkedBg;
-        private readonly Color _accentColor;
-        private readonly Color _borderColor;
         private readonly Label _statusDot;
-
-        // Green = already installed, pre-scan
-        private static readonly Color GREEN       = Color.FromArgb(34, 197, 94);
-        private static readonly Color INSTALLED_BG = Color.FromArgb(14, 30, 18); // dark green tint
 
         public event EventHandler CheckedChanged;
 
@@ -735,10 +727,9 @@ namespace AppDownloader
             get => _checked;
             set
             {
-                // Block selecting an installed tile
                 if (value && _isInstalled) return;
                 _checked  = value;
-                BackColor = value ? _checkedBg : (_isInstalled ? INSTALLED_BG : _normalBg);
+                BackColor = value ? _checkedBg : _normalBg;
                 Invalidate();
                 CheckedChanged?.Invoke(this, EventArgs.Empty);
             }
@@ -747,52 +738,33 @@ namespace AppDownloader
         public AppTile(AppEntry app, Color normalBg, Color checkedBg, Color accent,
                        Color textPri, Color textSec, Color border)
         {
-            _normalBg    = normalBg;
-            _checkedBg   = checkedBg;
-            _accentColor = accent;
-            _borderColor = border;
+            _normalBg   = normalBg;
+            _checkedBg  = checkedBg;
 
             Size      = new Size(230, 125);
             BackColor = normalBg;
             Margin    = new Padding(6);
             Cursor    = Cursors.Hand;
 
-            // Paint: border + selection checkbox OR installed checkmark
             this.Paint += (s, e) =>
             {
                 var g = e.Graphics;
 
-                // Border — green when installed, accent when selected, dim otherwise
-                Color borderCol = _isInstalled ? Color.FromArgb(40, 140, 70)
-                                : _checked     ? accent
-                                :                border;
-                using var pen = new System.Drawing.Pen(borderCol, _isInstalled ? 1.5f : 1.5f);
-                g.DrawRectangle(pen, 0, 0, Width - 1, Height - 1);
+                Color borderCol = _checked ? accent : border;
+                using (var pen = new System.Drawing.Pen(borderCol, 1.5f))
+                    g.DrawRectangle(pen, 0, 0, Width - 1, Height - 1);
 
-                if (_isInstalled)
+                if (_checked)
                 {
-                    // Green filled circle with white tick in top-right corner
-                    var circleRect = new Rectangle(Width - 24, 4, 18, 18);
-                    g.FillEllipse(new SolidBrush(GREEN), circleRect);
-                    using var tickPen = new System.Drawing.Pen(Color.White, 2f);
-                    g.DrawLines(tickPen, new[]
-                    {
-                        new Point(Width - 21, 13),
-                        new Point(Width - 17, 17),
-                        new Point(Width - 10,  8)
-                    });
-                }
-                else if (_checked)
-                {
-                    // Accent filled square tick (existing selection indicator)
-                    g.FillRectangle(new SolidBrush(accent), Width - 22, 6, 16, 16);
-                    using var whitePen = new System.Drawing.Pen(Color.White, 2f);
-                    g.DrawLines(whitePen, new[]
-                    {
-                        new Point(Width - 19, 14),
-                        new Point(Width - 15, 18),
-                        new Point(Width - 9,  9)
-                    });
+                    using (var brush = new SolidBrush(accent))
+                        g.FillRectangle(brush, Width - 22, 6, 16, 16);
+                    using (var whitePen = new System.Drawing.Pen(Color.White, 2f))
+                        g.DrawLines(whitePen, new[]
+                        {
+                            new Point(Width - 19, 14),
+                            new Point(Width - 15, 18),
+                            new Point(Width - 9,  9)
+                        });
                 }
             };
 
@@ -831,7 +803,6 @@ namespace AppDownloader
                 BackColor = Color.Transparent
             };
 
-            // Method badge
             string method  = app.WingetId != null ? "winget" : "direct";
             Color  badgeBg = app.WingetId != null
                 ? Color.FromArgb(30, 99, 102, 241)
@@ -872,7 +843,6 @@ namespace AppDownloader
 
             Controls.AddRange(new Control[] { iconLbl, nameLbl, descLbl, methodBadge, catBadge, _statusDot });
 
-            // Click to toggle — blocked silently if already installed
             void Toggle(object s, EventArgs e)
             {
                 if (_isInstalled) return;
@@ -884,14 +854,8 @@ namespace AppDownloader
             descLbl.Click  += Toggle;
             catBadge.Click += Toggle;
 
-            this.MouseEnter += (s, e) =>
-            {
-                if (!_checked && !_isInstalled) BackColor = Color.FromArgb(28, 28, 38);
-            };
-            this.MouseLeave += (s, e) =>
-            {
-                if (!_checked) BackColor = _isInstalled ? INSTALLED_BG : _normalBg;
-            };
+            this.MouseEnter += (s, e) => { if (!_checked) BackColor = Color.FromArgb(28, 28, 38); };
+            this.MouseLeave += (s, e) => { if (!_checked) BackColor = _normalBg; };
         }
 
         public void SetStatus(InstallStatus status)
@@ -904,9 +868,9 @@ namespace AppDownloader
                     _statusDot.ForeColor = Color.FromArgb(251, 191, 36);
                     break;
                 case InstallStatus.Success:
-                    _statusDot.Text = "";
-                    // Mark as installed so the green check appears immediately
-                    SetInstalled(true);
+                    _statusDot.Text      = "✔ Done";
+                    _statusDot.ForeColor = Color.FromArgb(34, 197, 94);
+                    IsChecked = false;
                     break;
                 case InstallStatus.Failed:
                     _statusDot.Text      = "✘ Failed";
@@ -918,22 +882,7 @@ namespace AppDownloader
         public void SetInstalled(bool installed)
         {
             _isInstalled = installed;
-            if (installed)
-            {
-                // Force deselect — installed apps can't be queued
-                bool wasChecked = _checked;
-                _checked  = false;
-                BackColor = INSTALLED_BG;
-                Cursor    = Cursors.Default;
-                if (wasChecked)
-                    CheckedChanged?.Invoke(this, EventArgs.Empty);
-            }
-            else
-            {
-                BackColor = _normalBg;
-                Cursor    = Cursors.Hand;
-            }
-            Invalidate(); // repaint the corner checkmark
+            // TODO: visual treatment for installed state
         }
     }
 
@@ -949,13 +898,29 @@ namespace AppDownloader
             BackColor = Color.Transparent;
             Anchor    = AnchorStyles.Left | AnchorStyles.Right;
 
-            // Resize width to match parent FlowLayoutPanel's client area
+            // Track the last parent so we can unsubscribe cleanly
+            Control _lastParent = null;
+            EventHandler syncHandler = null;
+
+            syncHandler = (ps, pe) =>
+            {
+                if (_lastParent != null)
+                    Width = _lastParent.ClientSize.Width - Margin.Horizontal;
+            };
+
             this.ParentChanged += (s, e) =>
             {
-                if (Parent == null) return;
-                void Sync() => Width = Parent.ClientSize.Width - Margin.Horizontal;
-                Sync();
-                Parent.ClientSizeChanged += (ps, pe) => Sync();
+                // Unsubscribe from previous parent
+                if (_lastParent != null)
+                    _lastParent.ClientSizeChanged -= syncHandler;
+
+                _lastParent = Parent;
+
+                if (_lastParent != null)
+                {
+                    Width = _lastParent.ClientSize.Width - Margin.Horizontal;
+                    _lastParent.ClientSizeChanged += syncHandler;
+                }
             };
 
             var bar = new Panel

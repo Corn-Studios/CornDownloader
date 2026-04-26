@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Net;
+using System.Net.Http;
 using System.Threading.Tasks;
 
 namespace AppDownloader
@@ -57,61 +57,50 @@ namespace AppDownloader
         }
 
         /// <summary>
-        /// Runs a single 'winget list' and returns a HashSet of all installed winget IDs.
-        /// Writes to a temp file to avoid encoding corruption from winget's progress spinner.
+        /// Uses 'winget export' to get a clean JSON list of all installed apps,
+        /// then matches against the catalog. JSON is far more reliable than parsing
+        /// the formatted table output of 'winget list'.
         /// </summary>
         public async Task<HashSet<string>> GetAllInstalledIdsAsync()
         {
             var installed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (!WingetAvailable) return installed;
 
-            string tempFile = Path.Combine(Path.GetTempPath(), $"corndownloader_winget_{Guid.NewGuid():N}.txt");
+            string tempFile = Path.Combine(Path.GetTempPath(), $"corndownloader_{Guid.NewGuid():N}.json");
 
             try
             {
-                // Redirect winget output directly — bypass the progress-spinner encoding issue
-                // by setting TERM=dumb and using UTF-8 code page
                 var psi = new ProcessStartInfo
                 {
-                    FileName               = "winget",
-                    Arguments              = "list --accept-source-agreements --disable-interactivity",
+                    FileName        = "winget",
+                    Arguments       = $"export -o \"{tempFile}\" --accept-source-agreements --include-versions",
+                    UseShellExecute = false,
+                    CreateNoWindow  = true,
                     RedirectStandardOutput = true,
-                    RedirectStandardError  = true,
-                    UseShellExecute        = false,
-                    CreateNoWindow         = true,
-                    StandardOutputEncoding = System.Text.Encoding.Unicode
+                    RedirectStandardError  = true
                 };
 
-                var tcs    = new TaskCompletionSource<bool>();
-                var proc   = new Process { StartInfo = psi, EnableRaisingEvents = true };
-                var output = new System.Text.StringBuilder();
-
-                proc.OutputDataReceived += (s, e) =>
-                {
-                    if (e.Data != null) output.AppendLine(e.Data);
-                };
+                var tcs  = new TaskCompletionSource<bool>();
+                var proc = new Process { StartInfo = psi, EnableRaisingEvents = true };
                 proc.Exited += (s, e) => tcs.TrySetResult(true);
-
                 proc.Start();
                 proc.BeginOutputReadLine();
                 proc.BeginErrorReadLine();
 
-                // Timeout after 15 seconds to avoid hanging on slow machines
-                await Task.WhenAny(tcs.Task, Task.Delay(15000));
+                await Task.WhenAny(tcs.Task, Task.Delay(20000));
 
-                // Strip non-printable characters (box-drawing, escape codes, etc.)
-                var clean = new System.Text.StringBuilder();
-                foreach (char c in output.ToString())
-                {
-                    if (c == '\n' || c == '\r' || (c >= 32 && c <= 126))
-                        clean.Append(c);
-                }
-                string cleanOutput = clean.ToString();
+                if (!File.Exists(tempFile)) return installed;
 
+                string json = File.ReadAllText(tempFile, System.Text.Encoding.UTF8);
+
+                // The JSON structure is:
+                // { "Sources": [ { "Packages": [ { "PackageIdentifier": "Brave.Brave" }, ... ] } ] }
+                // Simple string matching on "PackageIdentifier" values — no JSON library needed.
                 foreach (var app in AppCatalog.All)
                 {
                     if (string.IsNullOrEmpty(app.WingetId)) continue;
-                    if (cleanOutput.IndexOf(app.WingetId, StringComparison.OrdinalIgnoreCase) >= 0)
+                    // Look for: "PackageIdentifier": "Brave.Brave"
+                    if (json.IndexOf(app.WingetId, StringComparison.OrdinalIgnoreCase) >= 0)
                         installed.Add(app.WingetId);
                 }
             }
@@ -218,6 +207,8 @@ namespace AppDownloader
             return result;
         }
 
+        private static readonly HttpClient _httpClient = new HttpClient();
+
         private async Task<InstallResult> InstallViaDirectUrl(
             AppEntry app,
             string downloadFolder,
@@ -231,14 +222,30 @@ namespace AppDownloader
 
             try
             {
-                using (var wc = new WebClient())
+                _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("AppDownloader/1.0");
+
+                using (var response = await _httpClient.GetAsync(app.DirectUrl, HttpCompletionOption.ResponseHeadersRead))
                 {
-                    wc.Headers.Add("User-Agent", "AppDownloader/1.0");
-                    wc.DownloadProgressChanged += (s, e) =>
+                    response.EnsureSuccessStatusCode();
+                    long? totalBytes = response.Content.Headers.ContentLength;
+
+                    using (var stream = await response.Content.ReadAsStreamAsync())
+                    using (var file   = new FileStream(destPath, FileMode.Create, FileAccess.Write, FileShare.None))
                     {
-                        onProgress?.Invoke($"Downloading {app.Name}: {e.ProgressPercentage}%");
-                    };
-                    await wc.DownloadFileTaskAsync(new Uri(app.DirectUrl), destPath);
+                        var buffer    = new byte[81920];
+                        long read     = 0;
+                        int  bytes;
+                        while ((bytes = await stream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                        {
+                            await file.WriteAsync(buffer, 0, bytes);
+                            read += bytes;
+                            if (totalBytes > 0)
+                            {
+                                int pct = (int)(read * 100 / totalBytes.Value);
+                                onProgress?.Invoke($"Downloading {app.Name}: {pct}%");
+                            }
+                        }
+                    }
                 }
 
                 onProgress?.Invoke($"Download complete. Launching installer for {app.Name}...");
