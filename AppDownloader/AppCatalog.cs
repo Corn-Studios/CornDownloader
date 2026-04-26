@@ -18,6 +18,7 @@ namespace AppDownloader
         public string FileName { get; set; }           // for direct downloads
         public DownloadMethod PreferredMethod { get; set; }
         public string IconChar { get; set; }           // emoji icon
+        public bool IsRecommended { get; set; }        // included in Recommended preset
     }
 
     public static class AppCatalog
@@ -32,7 +33,8 @@ namespace AppDownloader
                 WingetId = "Mozilla.Firefox",
                 DirectUrl = "https://download.mozilla.org/?product=firefox-latest&os=win64&lang=en-US",
                 FileName = "FirefoxSetup.exe",
-                PreferredMethod = DownloadMethod.Winget
+                PreferredMethod = DownloadMethod.Winget,
+                IsRecommended = true
             },
             new AppEntry {
                 Name = "Chromium", Category = "Browsers", IconChar = "🔵",
@@ -61,7 +63,8 @@ namespace AppDownloader
                 WingetId = "Microsoft.VisualStudioCode",
                 DirectUrl = "https://code.visualstudio.com/sha/download?build=stable&os=win32-x64-user",
                 FileName = "VSCodeSetup.exe",
-                PreferredMethod = DownloadMethod.Winget
+                PreferredMethod = DownloadMethod.Winget,
+                IsRecommended = true
             },
             new AppEntry {
                 Name = "Git", Category = "Dev Tools", IconChar = "🔀",
@@ -69,7 +72,8 @@ namespace AppDownloader
                 WingetId = "Git.Git",
                 DirectUrl = "https://github.com/git-for-windows/git/releases/latest/download/Git-2.44.0-64-bit.exe",
                 FileName = "GitSetup.exe",
-                PreferredMethod = DownloadMethod.Winget
+                PreferredMethod = DownloadMethod.Winget,
+                IsRecommended = true
             },
             new AppEntry {
                 Name = "Node.js (LTS)", Category = "Dev Tools", IconChar = "🟢",
@@ -136,7 +140,8 @@ namespace AppDownloader
                 WingetId = "VideoLAN.VLC",
                 DirectUrl = "https://get.videolan.org/vlc/last/win64/",
                 FileName = "VLCSetup.exe",
-                PreferredMethod = DownloadMethod.Winget
+                PreferredMethod = DownloadMethod.Winget,
+                IsRecommended = true
             },
             new AppEntry {
                 Name = "Spotify", Category = "Media & Entertainment", IconChar = "🎵",
@@ -243,7 +248,8 @@ namespace AppDownloader
                 WingetId = "Notepad++.Notepad++",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
+                PreferredMethod = DownloadMethod.Winget,
+                IsRecommended = true
             },
             new AppEntry {
                 Name = "ShareX", Category = "Productivity", IconChar = "📸",
@@ -261,7 +267,8 @@ namespace AppDownloader
                 WingetId = "Valve.Steam",
                 DirectUrl = "https://cdn.akamai.steamstatic.com/client/installer/SteamSetup.exe",
                 FileName = "SteamSetup.exe",
-                PreferredMethod = DownloadMethod.Winget
+                PreferredMethod = DownloadMethod.Winget,
+                IsRecommended = true
             },
             new AppEntry {
                 Name = "Epic Games Launcher", Category = "Gaming", IconChar = "🚀",
@@ -301,7 +308,8 @@ namespace AppDownloader
                 WingetId = "Discord.Discord",
                 DirectUrl = "https://discord.com/api/downloads/distributions/app/installers/latest?channel=stable&platform=win&arch=x64",
                 FileName = "DiscordSetup.exe",
-                PreferredMethod = DownloadMethod.Winget
+                PreferredMethod = DownloadMethod.Winget,
+                IsRecommended = true
             },
             new AppEntry {
                 Name = "MSI Afterburner", Category = "Gaming", IconChar = "🔥",
@@ -327,7 +335,8 @@ namespace AppDownloader
                 WingetId = "7zip.7zip",
                 DirectUrl = "https://www.7-zip.org/a/7z2401-x64.exe",
                 FileName = "7ZipSetup.exe",
-                PreferredMethod = DownloadMethod.Winget
+                PreferredMethod = DownloadMethod.Winget,
+                IsRecommended = true
             },
             new AppEntry {
                 Name = "Everything Search", Category = "Utilities & System Tools", IconChar = "🔍",
@@ -393,7 +402,8 @@ namespace AppDownloader
                 WingetId = "Microsoft.PowerToys",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
+                PreferredMethod = DownloadMethod.Winget,
+                IsRecommended = true
             },
 
             // ── CUSTOMIZATION / PERSONALIZATION ───────────────────────────────

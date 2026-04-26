@@ -29,6 +29,7 @@ namespace AppDownloader
         private readonly Dictionary<AppEntry, AppTile> _tiles = new Dictionary<AppEntry, AppTile>();
         private string _activeCategory = "All";
         private bool _isInstalling = false;
+        private readonly Dictionary<AppEntry, bool> _installedCache = new Dictionary<AppEntry, bool>();
 
         // ── Controls ─────────────────────────────────────────────────────────
         private Panel        _sidebar;
@@ -48,18 +49,76 @@ namespace AppDownloader
         private CheckBox     _preferWingetChk;
         private RichTextBox  _logBox;
         private Panel        _logPanel;
+        private Label        _scanStatusLabel;
 
-        private readonly string[] _categories = {
-            "All", "Browsers", "Dev Tools", "Media & Entertainment",
-            "Productivity", "Gaming", "Utilities & System Tools", "Customization"
-        };
+        private readonly string[] _categories;
 
         public MainForm()
         {
             _dm = new DownloadManager();
+            // Build category list sorted alphabetically — matches the grid's OrderBy(g => g.Key)
+            _categories = new[] { "All" }
+                .Concat(AppCatalog.All.Select(a => a.Category).Distinct().OrderBy(c => c))
+                .ToArray();
             InitializeComponent();
+            ApplyRecommendedPreset();
             PopulateApps("All");
             UpdateSelectionCount();
+            _ = ScanInstalledAsync(); // fire-and-forget background scan
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        //  INSTALLED DETECTION
+        // ─────────────────────────────────────────────────────────────────────
+        private async Task ScanInstalledAsync()
+        {
+            if (!_dm.WingetAvailable) return;
+
+            if (_scanStatusLabel != null)
+            {
+                _scanStatusLabel.Text      = "🔍 Scanning installed apps...";
+                _scanStatusLabel.ForeColor = TEXT_SEC;
+            }
+
+            // Single winget list call — returns all installed IDs at once
+            var installedIds = await _dm.GetAllInstalledIdsAsync();
+
+            foreach (var app in AppCatalog.All)
+            {
+                _installedCache[app] = !string.IsNullOrEmpty(app.WingetId) &&
+                                       installedIds.Contains(app.WingetId);
+            }
+
+            this.Invoke((Action)(() =>
+            {
+                foreach (var kv in _tiles)
+                {
+                    if (_installedCache.TryGetValue(kv.Key, out bool inst))
+                        kv.Value.SetInstalled(inst);
+                }
+
+                if (_scanStatusLabel != null)
+                {
+                    int installedCount = _installedCache.Values.Count(v => v);
+                    int totalCount     = AppCatalog.All.Count;
+                    _scanStatusLabel.Text      = $"✔ {installedCount}/{totalCount} apps installed";
+                    _scanStatusLabel.ForeColor = SUCCESS;
+                }
+
+                UpdateSelectionCount();
+            }));
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        //  RECOMMENDED PRESET
+        // ─────────────────────────────────────────────────────────────────────
+        private void ApplyRecommendedPreset()
+        {
+            foreach (var app in AppCatalog.All)
+            {
+                if (_tiles.TryGetValue(app, out var tile))
+                    tile.IsChecked = app.IsRecommended;
+            }
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -179,7 +238,34 @@ namespace AppDownloader
             deselAll.Width    = 86;
             deselAll.Click   += (s, e) => SetAllInView(false);
 
-            _sidebar.Controls.AddRange(new Control[] { selAll, deselAll });
+            // Recommended preset button
+            var recBtn = CreateSmallBtn("⭐ Recommended", ACCENT);
+            recBtn.Location  = new Point(8, y + 46);
+            recBtn.Width     = 174;
+            recBtn.Height    = 30;
+            recBtn.Font      = new Font("Segoe UI", 8.5f, FontStyle.Bold);
+            recBtn.Click    += (s, e) =>
+            {
+                // Clear all first, then check recommended
+                foreach (var kv in _tiles) kv.Value.IsChecked = false;
+                foreach (var kv in _tiles) kv.Value.IsChecked = kv.Key.IsRecommended;
+                UpdateSelectionCount();
+            };
+
+            // Scan status label
+            _scanStatusLabel = new Label
+            {
+                Text      = _dm.WingetAvailable ? "🔍 Scanning installed apps..." : "",
+                ForeColor = TEXT_SEC,
+                Font      = new Font("Segoe UI", 7.5f),
+                AutoSize  = false,
+                Size      = new Size(174, 28),
+                Location  = new Point(8, y + 84),
+                BackColor = Color.Transparent,
+                TextAlign = ContentAlignment.MiddleLeft
+            };
+
+            _sidebar.Controls.AddRange(new Control[] { selAll, deselAll, recBtn, _scanStatusLabel });
         }
 
         private Button CreateSidebarBtn(string category)
@@ -301,9 +387,13 @@ namespace AppDownloader
                     if (!_tiles.TryGetValue(app, out var tile))
                     {
                         tile = new AppTile(app, SURFACE, SURFACE2, ACCENT, TEXT_PRI, TEXT_SEC, BORDER);
+                        tile.IsChecked = app.IsRecommended;
                         tile.CheckedChanged += (s, e) => UpdateSelectionCount();
                         _tiles[app] = tile;
                     }
+                    // Apply cached installed state if scan has results
+                    if (_installedCache.TryGetValue(app, out bool installed))
+                        tile.SetInstalled(installed);
                     _appGrid.Controls.Add(tile);
                 }
             }
@@ -563,17 +653,40 @@ namespace AppDownloader
 
             Log($"[DONE] {ok}/{selected.Count} succeeded — {DateTime.Now:HH:mm:ss}");
 
-            if (fail > 0)
+            // Show summary — loop allows retry of failed apps
+            var pendingResults = results;
+            while (true)
             {
-                var failNames = string.Join("\n", results.Where(r => r.Status == InstallStatus.Failed)
-                                                         .Select(r => $"  • {r.App.Name}: {r.Message}"));
-                MessageBox.Show($"{ok} app(s) installed successfully.\n\nFailed ({fail}):\n{failNames}",
-                    "Installation Complete", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            }
-            else
-            {
-                MessageBox.Show($"All {ok} app(s) installed successfully! 🎉",
-                    "Installation Complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                using var summary = new SummaryForm(pendingResults);
+                var dr = summary.ShowDialog(this);
+
+                if (dr != DialogResult.Retry || summary.FailedResults.Count == 0)
+                    break;
+
+                // Re-run only the failed apps
+                var retryApps = summary.FailedResults.Select(r => r.App).ToList();
+                Log($"[RETRY] Retrying {retryApps.Count} failed app(s)...");
+
+                _isInstalling = true;
+                _installBtn.Enabled = false;
+                _installBtn.Text = "⏳ Retrying...";
+                _overallProgress.Maximum = retryApps.Count;
+                _overallProgress.Value   = 0;
+
+                pendingResults = await _dm.InstallAllAsync(
+                    retryApps, folder, preferWinget,
+                    (app, status, msg) => this.Invoke((Action)(() =>
+                    {
+                        if (_tiles.TryGetValue(app, out var tile)) tile.SetStatus(status);
+                        _statusLabel.Text = $"{app.Name}: {msg}";
+                        Log($"[{app.Name}] {msg}");
+                    })),
+                    (done2, total2) => this.Invoke((Action)(() =>
+                        _overallProgress.Value = done2)));
+
+                _isInstalling = false;
+                _installBtn.Enabled = true;
+                _installBtn.Text    = "⬇  Install Selected";
             }
         }
 
@@ -604,20 +717,28 @@ namespace AppDownloader
     public class AppTile : Panel
     {
         private bool _checked;
+        private bool _isInstalled = false;
         private readonly Color _normalBg;
         private readonly Color _checkedBg;
         private readonly Color _accentColor;
+        private readonly Color _borderColor;
         private readonly Label _statusDot;
-        private InstallStatus _status = InstallStatus.Pending;
+
+        // Green = already installed, pre-scan
+        private static readonly Color GREEN       = Color.FromArgb(34, 197, 94);
+        private static readonly Color INSTALLED_BG = Color.FromArgb(14, 30, 18); // dark green tint
 
         public event EventHandler CheckedChanged;
+
         public bool IsChecked
         {
             get => _checked;
             set
             {
+                // Block selecting an installed tile
+                if (value && _isInstalled) return;
                 _checked  = value;
-                BackColor = value ? _checkedBg : _normalBg;
+                BackColor = value ? _checkedBg : (_isInstalled ? INSTALLED_BG : _normalBg);
                 Invalidate();
                 CheckedChanged?.Invoke(this, EventArgs.Empty);
             }
@@ -626,28 +747,48 @@ namespace AppDownloader
         public AppTile(AppEntry app, Color normalBg, Color checkedBg, Color accent,
                        Color textPri, Color textSec, Color border)
         {
-            _normalBg   = normalBg;
-            _checkedBg  = checkedBg;
+            _normalBg    = normalBg;
+            _checkedBg   = checkedBg;
             _accentColor = accent;
+            _borderColor = border;
 
             Size      = new Size(230, 125);
             BackColor = normalBg;
             Margin    = new Padding(6);
             Cursor    = Cursors.Hand;
 
-            // Rounded border via paint
+            // Paint: border + selection checkbox OR installed checkmark
             this.Paint += (s, e) =>
             {
                 var g = e.Graphics;
-                using var pen = new System.Drawing.Pen(_checked ? accent : border, 1.5f);
+
+                // Border — green when installed, accent when selected, dim otherwise
+                Color borderCol = _isInstalled ? Color.FromArgb(40, 140, 70)
+                                : _checked     ? accent
+                                :                border;
+                using var pen = new System.Drawing.Pen(borderCol, _isInstalled ? 1.5f : 1.5f);
                 g.DrawRectangle(pen, 0, 0, Width - 1, Height - 1);
 
-                if (_checked)
+                if (_isInstalled)
                 {
-                    // Checkbox tick
+                    // Green filled circle with white tick in top-right corner
+                    var circleRect = new Rectangle(Width - 24, 4, 18, 18);
+                    g.FillEllipse(new SolidBrush(GREEN), circleRect);
+                    using var tickPen = new System.Drawing.Pen(Color.White, 2f);
+                    g.DrawLines(tickPen, new[]
+                    {
+                        new Point(Width - 21, 13),
+                        new Point(Width - 17, 17),
+                        new Point(Width - 10,  8)
+                    });
+                }
+                else if (_checked)
+                {
+                    // Accent filled square tick (existing selection indicator)
                     g.FillRectangle(new SolidBrush(accent), Width - 22, 6, 16, 16);
                     using var whitePen = new System.Drawing.Pen(Color.White, 2f);
-                    g.DrawLines(whitePen, new[] {
+                    g.DrawLines(whitePen, new[]
+                    {
                         new Point(Width - 19, 14),
                         new Point(Width - 15, 18),
                         new Point(Width - 9,  9)
@@ -691,11 +832,11 @@ namespace AppDownloader
             };
 
             // Method badge
-            string method = app.WingetId != null ? "winget" : "direct";
+            string method  = app.WingetId != null ? "winget" : "direct";
             Color  badgeBg = app.WingetId != null
                 ? Color.FromArgb(30, 99, 102, 241)
                 : Color.FromArgb(30, 251, 191, 36);
-            Color badgeFg = app.WingetId != null
+            Color  badgeFg = app.WingetId != null
                 ? Color.FromArgb(160, 165, 255)
                 : Color.FromArgb(251, 191, 36);
 
@@ -731,21 +872,30 @@ namespace AppDownloader
 
             Controls.AddRange(new Control[] { iconLbl, nameLbl, descLbl, methodBadge, catBadge, _statusDot });
 
-            // Click to toggle
-            void Toggle(object s, EventArgs e) => IsChecked = !_checked;
+            // Click to toggle — blocked silently if already installed
+            void Toggle(object s, EventArgs e)
+            {
+                if (_isInstalled) return;
+                IsChecked = !_checked;
+            }
             this.Click     += Toggle;
             iconLbl.Click  += Toggle;
             nameLbl.Click  += Toggle;
             descLbl.Click  += Toggle;
             catBadge.Click += Toggle;
 
-            this.MouseEnter += (s, e) => { if (!_checked) BackColor = Color.FromArgb(28, 28, 38); };
-            this.MouseLeave += (s, e) => { if (!_checked) BackColor = _normalBg; };
+            this.MouseEnter += (s, e) =>
+            {
+                if (!_checked && !_isInstalled) BackColor = Color.FromArgb(28, 28, 38);
+            };
+            this.MouseLeave += (s, e) =>
+            {
+                if (!_checked) BackColor = _isInstalled ? INSTALLED_BG : _normalBg;
+            };
         }
 
         public void SetStatus(InstallStatus status)
         {
-            _status = status;
             switch (status)
             {
                 case InstallStatus.Installing:
@@ -754,15 +904,36 @@ namespace AppDownloader
                     _statusDot.ForeColor = Color.FromArgb(251, 191, 36);
                     break;
                 case InstallStatus.Success:
-                    _statusDot.Text      = "✔ Done";
-                    _statusDot.ForeColor = Color.FromArgb(34, 197, 94);
-                    IsChecked = false;
+                    _statusDot.Text = "";
+                    // Mark as installed so the green check appears immediately
+                    SetInstalled(true);
                     break;
                 case InstallStatus.Failed:
                     _statusDot.Text      = "✘ Failed";
                     _statusDot.ForeColor = Color.FromArgb(239, 68, 68);
                     break;
             }
+        }
+
+        public void SetInstalled(bool installed)
+        {
+            _isInstalled = installed;
+            if (installed)
+            {
+                // Force deselect — installed apps can't be queued
+                bool wasChecked = _checked;
+                _checked  = false;
+                BackColor = INSTALLED_BG;
+                Cursor    = Cursors.Default;
+                if (wasChecked)
+                    CheckedChanged?.Invoke(this, EventArgs.Empty);
+            }
+            else
+            {
+                BackColor = _normalBg;
+                Cursor    = Cursors.Hand;
+            }
+            Invalidate(); // repaint the corner checkmark
         }
     }
 
@@ -812,6 +983,225 @@ namespace AppDownloader
             };
 
             Controls.AddRange(new Control[] { bar, lbl });
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  POST-INSTALL SUMMARY FORM
+    // ─────────────────────────────────────────────────────────────────────────
+    public class SummaryForm : Form
+    {
+        private static readonly Color BG       = Color.FromArgb(13, 13, 18);
+        private static readonly Color SURFACE  = Color.FromArgb(22, 22, 30);
+        private static readonly Color SURFACE2 = Color.FromArgb(30, 30, 40);
+        private static readonly Color ACCENT   = Color.FromArgb(99, 102, 241);
+        private static readonly Color SUCCESS  = Color.FromArgb(34, 197, 94);
+        private static readonly Color DANGER   = Color.FromArgb(239, 68, 68);
+        private static readonly Color TEXT_PRI = Color.FromArgb(240, 240, 255);
+        private static readonly Color TEXT_SEC = Color.FromArgb(140, 140, 170);
+        private static readonly Color BORDER   = Color.FromArgb(40, 40, 58);
+
+        public List<InstallResult> FailedResults { get; private set; } = new List<InstallResult>();
+
+        public SummaryForm(List<InstallResult> results)
+        {
+            int ok   = results.Count(r => r.Status == InstallStatus.Success);
+            int fail = results.Count(r => r.Status == InstallStatus.Failed);
+
+            Text             = "Installation Summary";
+            Size             = new Size(540, 520);
+            MinimumSize      = new Size(440, 400);
+            BackColor        = BG;
+            ForeColor        = TEXT_PRI;
+            Font             = new Font("Segoe UI", 9f);
+            StartPosition    = FormStartPosition.CenterParent;
+            FormBorderStyle  = FormBorderStyle.FixedDialog;
+            MaximizeBox      = false;
+
+            // ── Header ───────────────────────────────────────────────────────
+            var header = new Panel
+            {
+                BackColor = SURFACE,
+                Dock      = DockStyle.Top,
+                Height    = 70
+            };
+
+            bool allOk = fail == 0;
+            var titleLbl = new Label
+            {
+                Text      = allOk ? "✔  All apps installed!" : $"⚠  {fail} installation{(fail == 1 ? "" : "s")} failed",
+                Font      = new Font("Segoe UI Semibold", 13f),
+                ForeColor = allOk ? SUCCESS : DANGER,
+                AutoSize  = true,
+                Location  = new Point(18, 14)
+            };
+
+            var subLbl = new Label
+            {
+                Text      = $"{ok} succeeded   •   {fail} failed   •   {results.Count} total",
+                Font      = new Font("Segoe UI", 9f),
+                ForeColor = TEXT_SEC,
+                AutoSize  = true,
+                Location  = new Point(20, 42)
+            };
+
+            header.Controls.AddRange(new Control[] { titleLbl, subLbl });
+
+            // ── Scroll area ──────────────────────────────────────────────────
+            var scroll = new Panel
+            {
+                AutoScroll = true,
+                BackColor  = BG,
+                Dock       = DockStyle.Fill,
+                Padding    = new Padding(14, 10, 14, 10)
+            };
+
+            int y = 10;
+
+            // Successes
+            if (ok > 0)
+            {
+                scroll.Controls.Add(MakeSectionLabel("Installed successfully", SUCCESS, y));
+                y += 28;
+                foreach (var r in results.Where(r => r.Status == InstallStatus.Success))
+                {
+                    scroll.Controls.Add(MakeResultRow(r.App.IconChar, r.App.Name, "✔", SUCCESS, y));
+                    y += 38;
+                }
+                y += 8;
+            }
+
+            // Failures
+            if (fail > 0)
+            {
+                scroll.Controls.Add(MakeSectionLabel("Failed", DANGER, y));
+                y += 28;
+                foreach (var r in results.Where(r => r.Status == InstallStatus.Failed))
+                {
+                    FailedResults.Add(r);
+                    scroll.Controls.Add(MakeResultRow(r.App.IconChar, r.App.Name,
+                        $"✘  {TrimError(r.Message)}", DANGER, y));
+                    y += 38;
+                }
+            }
+
+            // Pad the scroll area
+            var spacer = new Panel { Height = 10, Top = y, BackColor = Color.Transparent };
+            scroll.Controls.Add(spacer);
+
+            // ── Footer ───────────────────────────────────────────────────────
+            var footer = new Panel
+            {
+                BackColor = SURFACE,
+                Dock      = DockStyle.Bottom,
+                Height    = 58
+            };
+
+            var closeBtn = new Button
+            {
+                Text      = "Close",
+                Size      = new Size(100, 34),
+                BackColor = SURFACE2,
+                ForeColor = TEXT_PRI,
+                FlatStyle = FlatStyle.Flat,
+                Cursor    = Cursors.Hand,
+                Anchor    = AnchorStyles.Right | AnchorStyles.Top
+            };
+            closeBtn.FlatAppearance.BorderColor = BORDER;
+            closeBtn.Location = new Point(this.ClientSize.Width - 118, 12);
+            closeBtn.Click   += (s, e) => { DialogResult = DialogResult.Cancel; Close(); };
+
+            footer.Controls.Add(closeBtn);
+
+            if (fail > 0)
+            {
+                var retryBtn = new Button
+                {
+                    Text      = $"↺  Retry {fail} Failed",
+                    Size      = new Size(140, 34),
+                    BackColor = DANGER,
+                    ForeColor = Color.White,
+                    FlatStyle = FlatStyle.Flat,
+                    Font      = new Font("Segoe UI Semibold", 9f),
+                    Cursor    = Cursors.Hand
+                };
+                retryBtn.FlatAppearance.BorderSize = 0;
+                retryBtn.Location = new Point(this.ClientSize.Width - 268, 12);
+                retryBtn.Click   += (s, e) => { DialogResult = DialogResult.Retry; Close(); };
+                footer.Controls.Add(retryBtn);
+            }
+
+            Controls.AddRange(new Control[] { scroll, header, footer });
+        }
+
+        private Label MakeSectionLabel(string text, Color color, int y) => new Label
+        {
+            Text      = text.ToUpperInvariant(),
+            Font      = new Font("Segoe UI Semibold", 7.5f),
+            ForeColor = color,
+            AutoSize  = true,
+            Top       = y,
+            Left      = 2,
+            BackColor = Color.Transparent
+        };
+
+        private Panel MakeResultRow(string icon, string name, string statusText, Color statusColor, int y)
+        {
+            var row = new Panel
+            {
+                BackColor = SURFACE,
+                Size      = new Size(490, 32),
+                Top       = y,
+                Left      = 0
+            };
+
+            row.Paint += (s, e) =>
+            {
+                using var pen = new System.Drawing.Pen(BORDER, 1);
+                e.Graphics.DrawRectangle(pen, 0, 0, row.Width - 1, row.Height - 1);
+            };
+
+            var iconLbl = new Label
+            {
+                Text      = icon,
+                Font      = new Font("Segoe UI Emoji", 11f),
+                AutoSize  = false,
+                Size      = new Size(28, 28),
+                Location  = new Point(4, 2),
+                BackColor = Color.Transparent,
+                TextAlign = ContentAlignment.MiddleCenter
+            };
+
+            var nameLbl = new Label
+            {
+                Text      = name,
+                Font      = new Font("Segoe UI", 9f),
+                ForeColor = TEXT_PRI,
+                AutoSize  = true,
+                Location  = new Point(36, 8),
+                BackColor = Color.Transparent
+            };
+
+            var statusLbl = new Label
+            {
+                Text      = statusText,
+                Font      = new Font("Segoe UI", 8f),
+                ForeColor = statusColor,
+                AutoSize  = true,
+                BackColor = Color.Transparent
+            };
+            // Right-align the status
+            statusLbl.Location = new Point(row.Width - statusLbl.PreferredWidth - 10, 9);
+            statusLbl.Anchor   = AnchorStyles.Right | AnchorStyles.Top;
+
+            row.Controls.AddRange(new Control[] { iconLbl, nameLbl, statusLbl });
+            return row;
+        }
+
+        private static string TrimError(string msg)
+        {
+            if (string.IsNullOrEmpty(msg)) return "Unknown error";
+            return msg.Length > 48 ? msg.Substring(0, 45) + "..." : msg;
         }
     }
 

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Threading.Tasks;
 
@@ -53,6 +54,74 @@ namespace AppDownloader
             {
                 return false;
             }
+        }
+
+        /// <summary>
+        /// Runs a single 'winget list' and returns a HashSet of all installed winget IDs.
+        /// Writes to a temp file to avoid encoding corruption from winget's progress spinner.
+        /// </summary>
+        public async Task<HashSet<string>> GetAllInstalledIdsAsync()
+        {
+            var installed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (!WingetAvailable) return installed;
+
+            string tempFile = Path.Combine(Path.GetTempPath(), $"corndownloader_winget_{Guid.NewGuid():N}.txt");
+
+            try
+            {
+                // Redirect winget output directly — bypass the progress-spinner encoding issue
+                // by setting TERM=dumb and using UTF-8 code page
+                var psi = new ProcessStartInfo
+                {
+                    FileName               = "winget",
+                    Arguments              = "list --accept-source-agreements --disable-interactivity",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError  = true,
+                    UseShellExecute        = false,
+                    CreateNoWindow         = true,
+                    StandardOutputEncoding = System.Text.Encoding.Unicode
+                };
+
+                var tcs    = new TaskCompletionSource<bool>();
+                var proc   = new Process { StartInfo = psi, EnableRaisingEvents = true };
+                var output = new System.Text.StringBuilder();
+
+                proc.OutputDataReceived += (s, e) =>
+                {
+                    if (e.Data != null) output.AppendLine(e.Data);
+                };
+                proc.Exited += (s, e) => tcs.TrySetResult(true);
+
+                proc.Start();
+                proc.BeginOutputReadLine();
+                proc.BeginErrorReadLine();
+
+                // Timeout after 15 seconds to avoid hanging on slow machines
+                await Task.WhenAny(tcs.Task, Task.Delay(15000));
+
+                // Strip non-printable characters (box-drawing, escape codes, etc.)
+                var clean = new System.Text.StringBuilder();
+                foreach (char c in output.ToString())
+                {
+                    if (c == '\n' || c == '\r' || (c >= 32 && c <= 126))
+                        clean.Append(c);
+                }
+                string cleanOutput = clean.ToString();
+
+                foreach (var app in AppCatalog.All)
+                {
+                    if (string.IsNullOrEmpty(app.WingetId)) continue;
+                    if (cleanOutput.IndexOf(app.WingetId, StringComparison.OrdinalIgnoreCase) >= 0)
+                        installed.Add(app.WingetId);
+                }
+            }
+            catch { }
+            finally
+            {
+                try { if (File.Exists(tempFile)) File.Delete(tempFile); } catch { }
+            }
+
+            return installed;
         }
 
         public async Task<InstallResult> InstallAsync(
@@ -213,23 +282,41 @@ namespace AppDownloader
             Action<AppEntry, InstallStatus, string> onAppProgress,
             Action<int, int> onOverallProgress)
         {
-            var results = new List<InstallResult>();
-            int total = apps.Count;
-            int done = 0;
+            var results     = new List<InstallResult>();
+            var resultsLock = new object();
+            int total       = apps.Count;
+            int done        = 0;
 
-            foreach (var app in apps)
+            // Allow up to 3 concurrent installs — enough to saturate bandwidth
+            // without hammering the system or causing installer conflicts.
+            var semaphore = new System.Threading.SemaphoreSlim(3, 3);
+
+            var tasks = apps.Select(async app =>
             {
-                onAppProgress?.Invoke(app, InstallStatus.Installing, $"Starting {app.Name}...");
+                await semaphore.WaitAsync();
+                try
+                {
+                    onAppProgress?.Invoke(app, InstallStatus.Installing, $"Starting {app.Name}...");
 
-                var result = await InstallAsync(app, downloadFolder, preferWinget,
-                    msg => onAppProgress?.Invoke(app, InstallStatus.Installing, msg));
+                    var result = await InstallAsync(app, downloadFolder, preferWinget,
+                        msg => onAppProgress?.Invoke(app, InstallStatus.Installing, msg));
 
-                results.Add(result);
-                done++;
-                onOverallProgress?.Invoke(done, total);
-                onAppProgress?.Invoke(app, result.Status, result.Message);
-            }
+                    lock (resultsLock)
+                    {
+                        results.Add(result);
+                        done++;
+                    }
 
+                    onOverallProgress?.Invoke(done, total);
+                    onAppProgress?.Invoke(app, result.Status, result.Message);
+                }
+                finally
+                {
+                    semaphore.Release();
+                }
+            });
+
+            await Task.WhenAll(tasks);
             return results;
         }
     }
