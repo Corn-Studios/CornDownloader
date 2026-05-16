@@ -879,6 +879,220 @@ namespace CornDownloader
                 FileName = null,
                 PreferredMethod = DownloadMethod.Winget
             },
+
+            // ── BROWSERS (batch 2) ────────────────────────────────────────────
+            new AppEntry {
+                Name = "LibreWolf", Category = "Browsers", IconChar = "🐺",
+                Description = "Hardened Firefox fork with enhanced privacy and security",
+                WingetId = "LibreWolf.LibreWolf",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "Min Browser", Category = "Browsers", IconChar = "◻️",
+                Description = "Minimal, distraction-free web browser",
+                WingetId = "minbrowser.min",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "Zen Browser", Category = "Browsers", IconChar = "🧘",
+                Description = "Firefox-based browser with a clean, modern UI",
+                WingetId = "Zen-Team.Zen-Browser",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+
+            // ── DEV TOOLS (batch 2) ───────────────────────────────────────────
+            new AppEntry {
+                Name = "Visual Studio 2022 Community", Category = "Dev Tools", IconChar = "🟣",
+                Description = "Microsoft's full-featured IDE for .NET, C++, and more",
+                WingetId = "Microsoft.VisualStudio.2022.Community",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "Rust (rustup)", Category = "Dev Tools", IconChar = "🦀",
+                Description = "Rust language toolchain installer and version manager",
+                WingetId = "Rustlang.Rustup",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "Go (Golang)", Category = "Dev Tools", IconChar = "🐹",
+                Description = "Google's fast, statically typed compiled language",
+                WingetId = "GoLang.Go",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "Android Studio", Category = "Dev Tools", IconChar = "🤖",
+                Description = "Google's official IDE for Android development",
+                WingetId = "Google.AndroidStudio",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+
+            // ── MEDIA & ENTERTAINMENT (batch 2) ───────────────────────────────
+            new AppEntry {
+                Name = "FreeTube", Category = "Media & Entertainment", IconChar = "🔴",
+                Description = "Private, open-source YouTube desktop client",
+                WingetId = "FreeTubeApp.FreeTube",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "GIMP", Category = "Media & Entertainment", IconChar = "🖌️",
+                Description = "GNU Image Manipulation Program — free Photoshop alternative",
+                WingetId = "GIMP.GIMP",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "DaVinci Resolve", Category = "Media & Entertainment", IconChar = "🎬",
+                Description = "Professional-grade video editor with free tier",
+                WingetId = "Blackmagic.DaVinciResolve",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "Streamlink Twitch GUI", Category = "Media & Entertainment", IconChar = "🟣",
+                Description = "Watch Twitch streams natively without a browser",
+                WingetId = "streamlink.streamlink-twitch-gui",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "Blender", Category = "Media & Entertainment", IconChar = "🧊",
+                Description = "Open-source 3D modeling, animation, and rendering suite",
+                WingetId = "BlenderFoundation.Blender",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+
+            // ── PRODUCTIVITY (batch 2) ────────────────────────────────────────
+            new AppEntry {
+                Name = "WhatsApp Desktop", Category = "Productivity", IconChar = "💚",
+                Description = "Official WhatsApp client for Windows",
+                WingetId = "WhatsApp.WhatsApp",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+
+            // ── GAMING (batch 2) ──────────────────────────────────────────────
+            new AppEntry {
+                Name = "Itch.io", Category = "Gaming", IconChar = "🕹️",
+                Description = "Indie game store and launcher",
+                WingetId = "itch.itch",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "Battle.net", Category = "Gaming", IconChar = "⚔️",
+                Description = "Blizzard's game launcher for WoW, Overwatch, and more",
+                WingetId = "Blizzard.BattleNet",
+                DirectUrl = "https://www.battle.net/download/getInstallerForGame?os=win&locale=enUS&version=LIVE&gameProgram=BATTLENET_APP",
+                FileName = "BattleNetSetup.exe",
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "Rockstar Games Launcher", Category = "Gaming", IconChar = "⭐",
+                Description = "Rockstar's launcher for GTA, RDR2, and more",
+                WingetId = "Rockstar.RockstarGamesLauncher",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "Vortex Mod Manager", Category = "Gaming", IconChar = "🌀",
+                Description = "Nexus Mods' official mod manager for hundreds of games",
+                WingetId = "NexusMods.Vortex",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "Nexus Mod Manager", Category = "Gaming", IconChar = "📦",
+                Description = "Classic mod manager for Nexus Mods (legacy)",
+                WingetId = null,
+                DirectUrl = "https://github.com/Nexus-Mods/Nexus-Mod-Manager/releases/latest/download/NexusModManager.exe",
+                FileName = "NexusModManager.exe",
+                PreferredMethod = DownloadMethod.DirectUrl
+            },
+            new AppEntry {
+                Name = "Mod Organizer 2", Category = "Gaming", IconChar = "🗂️",
+                Description = "Advanced mod manager for Bethesda games (Skyrim, Fallout, etc.)",
+                WingetId = "ModOrganizer2.ModOrganizer2",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "CapFrameX", Category = "Gaming", IconChar = "📈",
+                Description = "Frame time analysis and GPU benchmarking tool",
+                WingetId = "CXWorld.CapFrameX",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+
+            // ── UTILITIES & SYSTEM TOOLS (batch 2) ────────────────────────────
+            new AppEntry {
+                Name = "HWMonitor", Category = "Utilities & System Tools", IconChar = "🌡️",
+                Description = "Hardware temperature, voltage, and fan speed monitor",
+                WingetId = "CPUID.HWMonitor",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "O&O ShutUp10++", Category = "Utilities & System Tools", IconChar = "🔕",
+                Description = "Windows 10/11 privacy and telemetry control tool",
+                WingetId = "OO-Software.ShutUp10",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "BleachBit", Category = "Utilities & System Tools", IconChar = "🧹",
+                Description = "Open-source system cleaner and privacy tool",
+                WingetId = "BleachBit.BleachBit",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+
+            // ── CUSTOMIZATION (batch 2) ───────────────────────────────────────
+            new AppEntry {
+                Name = "FancyZones (PowerToys)", Category = "Customization", IconChar = "🪟",
+                Description = "Advanced window snapping layouts — part of Microsoft PowerToys",
+                WingetId = "Microsoft.PowerToys",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
+            new AppEntry {
+                Name = "ExplorerPatcher", Category = "Customization", IconChar = "🛠️",
+                Description = "Restore classic Windows 10 taskbar and UI elements on Windows 11",
+                WingetId = "valinet.ExplorerPatcher",
+                DirectUrl = null,
+                FileName = null,
+                PreferredMethod = DownloadMethod.Winget
+            },
         };
     }
 }
