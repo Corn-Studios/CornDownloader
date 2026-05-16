@@ -1,95 +1,116 @@
-# ⬇ App Downloader
+# 🌽 CornDownloader
 
-A **zero-dependency** Windows app that lets you browse, select, and install popular software in one click — inspired by Ninite, built with the same clean C#/WinForms approach as [Win11 Optimizer](https://github.com/ConnorCorn07/win11op).
+> A fast, open-source Windows app installer built in C# / WinForms by Corn Studios.  
+> Drop it on a fresh Windows install, pick your apps, and hit install — winget handles the rest.
 
----
-
-## ✨ Features
-
-- **60+ curated apps** across 7 categories
-- **Dual install method**: winget (silent, preferred) with automatic fallback to direct download URLs
-- **Dark UI** with category sidebar, search, and per-tile status feedback
-- **Folder picker** — choose where downloaded installers are saved
-- **Zero dependencies** — targets .NET 8 (built into Windows 11, free download for Windows 10), no NuGet packages
-- **Activity log panel** — toggle to see real-time install output
-- **Per-app status** — tiles show ⏳ Installing → ✔ Done / ✘ Failed
+**Version:** `1.1.0`  
+**Platform:** Windows 10 / 11 (64-bit)  
+**Runtime:** .NET 10 Desktop Runtime  
+**License:** MIT
 
 ---
 
-## 📂 Categories
+## Features
 
-| Category | Example Apps |
+### ⬇ Dual Install Methods
+Every app in the catalog supports either **winget** (preferred, silent, automatic) or a **direct URL** download as a fallback. CornDownloader detects whether winget is available at launch and switches modes automatically — direct URL installs are still fully silent, using `/S /passive /norestart` flags and UAC elevation where needed.
+
+### 🔍 Installed App Detection
+On startup, CornDownloader scans your system via `winget export` and automatically marks any catalog apps you already have installed. The scan is a single fast JSON parse — no per-app queries.
+
+### ⬆ One-Click Upgrade
+After the installed scan, CornDownloader runs `winget upgrade` in the background and surfaces a **⬆ Update N Apps** button in the top bar if any catalog apps have updates available. Clicking it upgrades everything in one pass, with per-app progress and a summary dialog.
+
+### 🔄 Winget Source Refresh
+Sources are refreshed silently on startup via `winget source update` so installs and upgrade checks always use fresh package data.
+
+### ⚡ Parallel Installs
+Up to **3 apps install concurrently** — enough to saturate most connections without causing installer conflicts. A progress bar and live status label track the queue in real time.
+
+### 📋 Summary Dialog
+After every install or upgrade run, a summary dialog breaks results into **Installed successfully** and **Failed** sections, with a **↺ Retry Failed** button to immediately retry any apps that errored.
+
+### 🔎 Search & Category Filtering
+A live search box filters the app grid by name or description as you type. The sidebar lets you jump to any category — Browsers, Dev Tools, Media & Entertainment, Productivity, Gaming, Utilities & System Tools, and Customization — with a count badge showing selected vs. total for each.
+
+### 📁 Download Folder Picker
+For direct URL installs, you can set any download folder via the bottom bar. The selection is remembered between sessions via `settings.json`.
+
+### 📟 Live Log Panel
+A toggleable terminal-style log panel at the bottom of the window streams real-time output from winget and installer processes — useful for diagnosing failures without leaving the app.
+
+### 💾 Persistent Settings
+Window size, download folder, and winget preference are saved automatically to `%AppData%\CornStudios\CornDownloader\settings.json` and restored on next launch.
+
+---
+
+## App Catalog
+
+**125 apps** across 7 categories:
+
+| Category | Apps |
 |---|---|
-| 🌐 Browsers | Chrome, Firefox, Brave, Opera GX, Vivaldi |
-| 💻 Dev Tools | VS Code, Git, Node.js, Python, Docker, PowerShell 7 |
-| 🎬 Media & Entertainment | VLC, Spotify, OBS, Audacity, HandBrake |
-| 📋 Productivity | Notion, Obsidian, Zoom, LibreOffice, ShareX |
-| 🎮 Gaming | Steam, Epic, Discord, GOG Galaxy, Playnite |
-| 🔧 Utilities & System Tools | 7-Zip, PowerToys, Everything Search, HWiNFO, Malwarebytes |
-| 🎨 Customization | Rainmeter, Lively Wallpaper, TranslucentTB, Windhawk, ModernFlyouts |
+| 🌐 Browsers | Firefox, Chrome, Brave, Chromium, Opera GX, Tor Browser, Waterfox, LibreWolf, Min, Zen |
+| 💻 Dev Tools | VS Code, Visual Studio 2022, Git, Node.js, Python, Windows Terminal, GitHub Desktop, Postman, Docker, PowerShell 7, JetBrains Toolbox, Neovim, WSL, Insomnia, FileZilla, HeidiSQL, Wireshark, Blockbench, PyPy, Rust, Go, Android Studio, and more |
+| 🎬 Media & Entertainment | VLC, Spotify, OBS, Audacity, HandBrake, MPC-HC, iTunes, Plex, Stremio, foobar2000, ImageGlass, FreeTube, GIMP, DaVinci Resolve, Streamlink Twitch GUI, Blender, and more |
+| 📋 Productivity | Notion, Obsidian, Slack, Zoom, LibreOffice, Notepad++, ShareX, Bitwarden, Thunderbird, Stretchly, Greenshot, WhatsApp Desktop, Ferdium, Claude Desktop, and more |
+| 🎮 Gaming | Steam, Epic Games, GOG Galaxy, EA App, Ubisoft Connect, Discord, MSI Afterburner, Playnite, Minecraft, Prism Launcher, Heroic, Xbox App, Sunshine, Parsec, Overwolf, Medal, Itch.io, Battle.net, Rockstar Games Launcher, Vortex, Nexus Mod Manager, Mod Organizer 2, CapFrameX, and more |
+| 🔧 Utilities & System Tools | 7-Zip, NanaZip, Everything Search, CPU-Z, HWiNFO, HWMonitor, CrystalDiskInfo, WinDirStat, Autoruns, Malwarebytes, PowerToys, GPU-Z, Revo Uninstaller, OpenVPN, ProtonVPN, WireGuard, Microsoft PC Manager, BleachBit, O&O ShutUp10++, Bulk Rename Utility, Process Hacker, Ventoy, Rufus, EqualizerAPO, and more |
+| 🎨 Customization | Rainmeter, Lively Wallpaper, TranslucentTB, StartAllBack, EarTrumpet, Windhawk, YASB, ModernFlyouts, Komorebi, GlazeWM, ExplorerPatcher, FancyZones (PowerToys) |
+
+Apps marked as **Recommended** are pre-selected on launch (Firefox, VS Code, Git, VLC, Discord, Steam, 7-Zip, PowerToys, Notepad++).
 
 ---
 
-## 🚀 Build & Run
+## Requirements
 
-### Prerequisites
-- Visual Studio 2022 (or `dotnet` CLI)
-- .NET 8 SDK — [download here](https://dotnet.microsoft.com/en-us/download/dotnet/8.0)
-
-### Build via CLI
-
-```bash
-dotnet build AppDownloader.sln -c Release
-```
-
-The output `.exe` will be in:
-```
-AppDownloader\bin\Release\net8.0-windows\AppDownloader.exe
-```
-
-### Or open in Visual Studio
-1. Open `AppDownloader.sln`
-2. Press `Ctrl+F5` to build and run
+- Windows 10 or 11 (64-bit)
+- [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)
+- [winget](https://aka.ms/getwinget) *(recommended direct URL fallback available without it)*
 
 ---
 
-## ⚙️ How It Works
+## Installation
 
-### winget (preferred)
-When winget is detected on the machine, apps install silently:
-```
-winget install --id <WingetId> --silent --accept-source-agreements --accept-package-agreements
-```
+1. Go to [Releases](https://github.com/ConnorCorn07/CornDownloader/releases) and download the latest `.exe`
+2. Run it: no installation required, it's a single portable executable
 
-### Direct URL fallback
-For apps without a winget ID, or if winget is unavailable, the app downloads the installer directly to your chosen folder and launches it with silent flags (`/S`, `/passive`). Each `AppEntry` in the catalog can carry both a `WingetId` and a `DirectUrl` — the preferred method is configurable per-app.
+## Build from Source
 
----
-
-## 🖥️ Requirements
-- Windows 10 or 11
-- .NET 8 Runtime *(pre-installed on most Windows 11 machines; [downloadable](https://dotnet.microsoft.com/en-us/download/dotnet/8.0) for Windows 10)*
-- Administrator rights (required to launch installers)
-
----
-
-## 🔧 Changelog
-
-### v1.0.0
-- Initial release with 60+ apps across 7 categories
-- winget-first install with direct URL fallback
-- Dark WinForms UI: category sidebar, app grid tiles, search, folder picker
-- Per-tile install status feedback (⏳ / ✔ / ✘)
-- Toggleable activity log panel
-- Retargeted from .NET Framework 4.8 → **.NET 8** to avoid missing targeting pack errors (`NU1100`)
-- Fixed `PlaceholderText` build error (`CS0117`) — `.NET 4.8` doesn't support this property; resolved by upgrading to .NET 8 where it works natively
+1. Install the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
+2. Clone the repo:
+   ```
+   git clone https://github.com/ConnorCorn07/CornDownloader.git
+   ```
+3. Build:
+   ```
+   cd CornDownloader
+   dotnet build -c Release
+   ```
+4. Run:
+   ```
+   bin\Release\net10.0-windows\CornDownloader.exe
+   ```
 
 ---
 
-## 📄 License
-MIT — free to use, modify, and distribute.
+## Notes
+
+- Winget installs are fully silent, no installer windows
+- Direct URL installs launch the installer with silent flags and request elevation via UAC once
+- Installer files downloaded via direct URL are deleted automatically after a successful run
+- The "prefer winget" checkbox is disabled automatically if winget is not detected on your system
+- Settings are stored in `%AppData%\CornStudios\CornDownloader\settings.json`
 
 ---
 
-## 🙏 Credits
-Built by ConnorCorn07 · Companion to [Win11 Optimizer](https://github.com/ConnorCorn07/win11op)
+## License
+
+MIT: see [LICENSE](LICENSE)
+
+---
+
+## AI Disclosure
+
+> ⚠ This project contains code written with the assistance of **Claude by Anthropic** (claude.ai).  
+> Portions of the UI, download logic, and app catalog were developed with Claude Sonnet. All code has been reviewed and tested by the project maintainer.
