@@ -302,7 +302,7 @@ namespace CornDownloader
             int h        = ClientSize.Height;
             int topH     = 60;
             int botH     = 120;
-            int sideW    = 190;
+            int sideW    = 210;
             int logH     = (_logPanel != null && _logPanel.Visible) ? _logPanel.Height : 0;
             int contentH = h - topH - botH - logH;
 
@@ -418,7 +418,7 @@ namespace CornDownloader
             {
                 var btn = CreateSidebarBtn(cat);
                 btn.Location = new Point(8, y);
-                btn.Width    = 174;
+                btn.Width    = 194;
                 _sidebar.Controls.Add(btn);
                 y += 38;
             }
@@ -427,7 +427,7 @@ namespace CornDownloader
             var divider = new Panel
             {
                 BackColor = BORDER,
-                Size      = new Size(158, 1),
+                Size      = new Size(178, 1),
                 Location  = new Point(12, y + 6)
             };
             _sidebar.Controls.Add(divider);
@@ -436,13 +436,13 @@ namespace CornDownloader
             // Select-All / Deselect-All
             var selAll = CreateSmallBtn("✦ ALL", ACCENT);
             selAll.Location  = new Point(8, y + 6);
-            selAll.Width     = 82;
+            selAll.Width     = 92;
             selAll.ForeColor = Color.FromArgb(8, 8, 18);
             selAll.Click    += (s, e) => SetAllInView(true);
 
             var deselAll = CreateSmallBtn("✗ NONE", SURFACE2);
-            deselAll.Location  = new Point(98, y + 6);
-            deselAll.Width     = 84;
+            deselAll.Location  = new Point(106, y + 6);
+            deselAll.Width     = 96;
             deselAll.ForeColor = TEXT_SEC;
             deselAll.Click    += (s, e) => SetAllInView(false);
 
@@ -450,7 +450,7 @@ namespace CornDownloader
             var recBtn = new Button
             {
                 Text      = "★  RECOMMENDED",
-                Size      = new Size(174, 32),
+                Size      = new Size(194, 32),
                 Location  = new Point(8, y + 42),
                 BackColor = ACCENT,
                 ForeColor = Color.FromArgb(8, 8, 18),
@@ -473,7 +473,7 @@ namespace CornDownloader
                 ForeColor = MUTED,
                 Font      = new Font("Courier New", 6.5f),
                 AutoSize  = false,
-                Size      = new Size(174, 24),
+                Size      = new Size(194, 24),
                 Location  = new Point(8, y + 82),
                 BackColor = Color.Transparent,
                 TextAlign = ContentAlignment.MiddleLeft
@@ -497,6 +497,13 @@ namespace CornDownloader
                 _                          => "◈"
             };
 
+            string display = category switch
+            {
+                "Media & Entertainment"    => "MEDIA & ENTERTAIN.",
+                "Utilities & System Tools" => "UTILITIES & SYS.",
+                _                          => category.ToUpper()
+            };
+
             int total = category == "All"
                 ? AppCatalog.All.Count
                 : AppCatalog.All.Count(a => a.Category == category);
@@ -504,14 +511,17 @@ namespace CornDownloader
             bool active = _activeCategory == category;
             var btn = new Button
             {
-                Text      = $"  {emoji}  {category.ToUpper()}",
-                TextAlign = ContentAlignment.MiddleLeft,
-                FlatStyle = FlatStyle.Flat,
-                BackColor = active ? Color.FromArgb(40, 245, 200, 66) : Color.Transparent,
-                ForeColor = active ? ACCENT : TEXT_SEC,
-                Font      = new Font("Courier New", 7f, active ? FontStyle.Bold : FontStyle.Regular),
-                Height    = 32,
-                Cursor    = Cursors.Hand
+                Text          = $"  {emoji}  {display}",
+                TextAlign     = ContentAlignment.MiddleLeft,
+                FlatStyle     = FlatStyle.Flat,
+                BackColor     = active ? Color.FromArgb(40, 245, 200, 66) : Color.Transparent,
+                ForeColor     = active ? ACCENT : TEXT_SEC,
+                Font          = new Font("Courier New", 7f, active ? FontStyle.Bold : FontStyle.Regular),
+                Height        = 32,
+                Padding       = new Padding(0, 0, 36, 0),
+                AutoEllipsis  = true,
+                AutoSize      = false,
+                Cursor        = Cursors.Hand
             };
             btn.FlatAppearance.BorderSize         = 0;
             btn.FlatAppearance.BorderColor        = active ? ACCENT : Color.FromArgb(1, 8, 8, 18);
