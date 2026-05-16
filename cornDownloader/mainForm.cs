@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
@@ -32,6 +33,7 @@ namespace CornDownloader
         private readonly DownloadManager _dm;
         private readonly Dictionary<string, Panel> _categoryPanels = new Dictionary<string, Panel>();
         private readonly Dictionary<AppEntry, AppTile> _tiles = new Dictionary<AppEntry, AppTile>();
+        private readonly Dictionary<string, Button> _sidebarBtns   = new Dictionary<string, Button>();
         private string _activeCategory = "All";
         private bool _isInstalling = false;
         private readonly Dictionary<AppEntry, bool> _installedCache = new Dictionary<AppEntry, bool>();
@@ -59,22 +61,87 @@ namespace CornDownloader
 
         private readonly string[] _categories;
 
+        private AppSettings _settings;
+
         public MainForm()
         {
+            _settings = SettingsManager.Load();
             _dm = new DownloadManager();
             // Build category list sorted alphabetically — matches the grid's OrderBy(g => g.Key)
             _categories = new[] { "All" }
                 .Concat(AppCatalog.All.Select(a => a.Category).Distinct().OrderBy(c => c))
                 .ToArray();
             InitializeComponent();
-            ApplyRecommendedPreset();
+            ApplySettings();
             PopulateApps("All");
             UpdateSelectionCount();
-            _ = ScanInstalledAsync(); // fire-and-forget background scan
-            _ = ScanUpgradesAsync();  // fire-and-forget upgrade scan
+            _ = RunStartupAsync();  // refresh sources, then scan installed + upgrades
+
+            this.FormClosing += (s, e) => SaveSettings();
+        }
+
+        private async Task RunStartupAsync()
+        {
+            await RefreshWingetSourcesAsync();
+            await ScanInstalledAsync();
+            _ = ScanUpgradesAsync();
         }
 
         private Button       _upgradeBtn;
+
+        private void ApplySettings()
+        {
+            // Restore window size
+            if (_settings.WindowWidth > 0 && _settings.WindowHeight > 0)
+                this.Size = new Size(_settings.WindowWidth, _settings.WindowHeight);
+
+            // Restore folder path
+            string folder = _settings.DownloadFolder;
+            if (string.IsNullOrEmpty(folder) || !Directory.Exists(folder))
+                folder = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) + @"\Downloads";
+            if (_folderBox != null) _folderBox.Text = folder;
+
+            // Restore winget preference
+            if (_preferWingetChk != null)
+                _preferWingetChk.Checked = _settings.PreferWinget && _dm.WingetAvailable;
+        }
+
+        private void SaveSettings()
+        {
+            _settings.DownloadFolder = _folderBox?.Text.Trim() ?? "";
+            _settings.PreferWinget   = _preferWingetChk?.Checked ?? true;
+            _settings.WindowWidth    = this.Width;
+            _settings.WindowHeight   = this.Height;
+            SettingsManager.Save(_settings);
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        //  WINGET SOURCE REFRESH
+        // ─────────────────────────────────────────────────────────────────────
+        private async Task RefreshWingetSourcesAsync()
+        {
+            if (!_dm.WingetAvailable) return;
+
+            this.Invoke((Action)(() =>
+            {
+                if (_scanStatusLabel != null)
+                {
+                    _scanStatusLabel.Text      = "🔄 Refreshing winget sources...";
+                    _scanStatusLabel.ForeColor = TEXT_SEC;
+                }
+            }));
+
+            await _dm.RefreshSourcesAsync();
+
+            this.Invoke((Action)(() =>
+            {
+                if (_scanStatusLabel != null)
+                {
+                    _scanStatusLabel.Text      = "🔍 Scanning installed apps...";
+                    _scanStatusLabel.ForeColor = TEXT_SEC;
+                }
+            }));
+        }
 
         // ─────────────────────────────────────────────────────────────────────
         //  INSTALLED DETECTION
@@ -82,12 +149,6 @@ namespace CornDownloader
         private async Task ScanInstalledAsync()
         {
             if (!_dm.WingetAvailable) return;
-
-            if (_scanStatusLabel != null)
-            {
-                _scanStatusLabel.Text      = "🔍 Scanning installed apps...";
-                _scanStatusLabel.ForeColor = TEXT_SEC;
-            }
 
             // Single winget list call — returns all installed IDs at once
             var installedIds = await _dm.GetAllInstalledIdsAsync();
@@ -209,18 +270,6 @@ namespace CornDownloader
 
             using var summary = new SummaryForm(results);
             summary.ShowDialog(this);
-        }
-
-        // ─────────────────────────────────────────────────────────────────────
-        //  RECOMMENDED PRESET
-        // ─────────────────────────────────────────────────────────────────────
-        private void ApplyRecommendedPreset()
-        {
-            foreach (var app in AppCatalog.All)
-            {
-                if (_tiles.TryGetValue(app, out var tile))
-                    tile.IsChecked = app.IsRecommended;
-            }
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -448,6 +497,10 @@ namespace CornDownloader
                 _                          => "◈"
             };
 
+            int total = category == "All"
+                ? AppCatalog.All.Count
+                : AppCatalog.All.Count(a => a.Category == category);
+
             bool active = _activeCategory == category;
             var btn = new Button
             {
@@ -461,12 +514,29 @@ namespace CornDownloader
                 Cursor    = Cursors.Hand
             };
             btn.FlatAppearance.BorderSize         = 0;
-            btn.FlatAppearance.BorderColor        = active ? ACCENT : Color.FromArgb(1, 1, 1, 1);
+            btn.FlatAppearance.BorderColor        = active ? ACCENT : Color.FromArgb(1, 8, 8, 18);
             btn.FlatAppearance.MouseOverBackColor = Color.FromArgb(20, 245, 200, 66);
+
+            // Count badge — sits flush on the right edge
+            var badge = new Label
+            {
+                Text      = total.ToString(),
+                AutoSize  = false,
+                Size      = new Size(28, 14),
+                Font      = new Font("Courier New", 6f, FontStyle.Bold),
+                ForeColor = MUTED,
+                BackColor = Color.Transparent,
+                TextAlign = ContentAlignment.MiddleCenter
+            };
+            btn.Controls.Add(badge);
+            void PositionBadge() => badge.Location = new Point(btn.Width - 32, (btn.Height - 14) / 2);
+            btn.SizeChanged  += (s, e) => PositionBadge();
+            btn.HandleCreated += (s, e) => PositionBadge();
 
             // Left gold bar for active state — painted on
             btn.Paint += (s, e) =>
             {
+                PositionBadge();
                 if (_activeCategory == category)
                 {
                     using var b = new SolidBrush(ACCENT);
@@ -480,7 +550,34 @@ namespace CornDownloader
                 RefreshSidebarButtons();
                 PopulateApps(category);
             };
+
+            _sidebarBtns[category] = btn;
             return btn;
+        }
+
+        /// <summary>
+        /// Refreshes the count badge on every sidebar button.
+        /// Shows "selected/total" in gold when anything is checked, plain total otherwise.
+        /// </summary>
+        private void UpdateSidebarCounts()
+        {
+            foreach (var kv in _sidebarBtns)
+            {
+                string cat    = kv.Key;
+                var    btn    = kv.Value;
+                int    total  = cat == "All"
+                    ? AppCatalog.All.Count
+                    : AppCatalog.All.Count(a => a.Category == cat);
+                int    sel    = _tiles
+                    .Where(t => (cat == "All" || t.Key.Category == cat) && t.Value.IsChecked)
+                    .Count();
+
+                if (btn.Controls.Count > 0 && btn.Controls[0] is Label badge)
+                {
+                    badge.Text      = sel > 0 ? $"{sel}/{total}" : total.ToString();
+                    badge.ForeColor = sel > 0 ? ACCENT : MUTED;
+                }
+            }
         }
 
         private Button CreateSmallBtn(string text, Color bg)
@@ -849,7 +946,16 @@ namespace CornDownloader
                     this.Invoke((Action)(() =>
                     {
                         if (_tiles.TryGetValue(app, out var tile))
+                        {
                             tile.SetStatus(status);
+
+                            // Parse a percentage out of winget/download progress lines
+                            // e.g. "Downloading ... 47%" or "Downloading: 47 %"
+                            int pct = ParsePercent(msg);
+                            if (pct >= 0 &&
+                                (status == InstallStatus.Installing || status == InstallStatus.Downloading))
+                                tile.SetProgress(pct);
+                        }
                         _statusLabel.Text = $"{app.Name}: {msg}";
                         Log($"[{app.Name}] {msg}");
                     }));
@@ -867,7 +973,7 @@ namespace CornDownloader
             int fail = results.Count(r => r.Status == InstallStatus.Failed);
 
             _statusLabel.Text   = $"Done — {ok} succeeded, {fail} failed.";
-            _installBtn.Text    = "⬇  Install Selected";
+            _installBtn.Text    = "⬇  INSTALL";
             _installBtn.Enabled = true;
             _isInstalling       = false;
 
@@ -906,7 +1012,7 @@ namespace CornDownloader
 
                 _isInstalling = false;
                 _installBtn.Enabled = true;
-                _installBtn.Text    = "⬇  Install Selected";
+                _installBtn.Text    = "⬇  INSTALL";
             }
         }
 
@@ -920,6 +1026,7 @@ namespace CornDownloader
                     ? "no apps selected"
                     : $"{count} app{appPlural} selected";
             }
+            UpdateSidebarCounts();
         }
 
         private void Log(string msg)
@@ -931,6 +1038,27 @@ namespace CornDownloader
                 _logBox.AppendText(msg + "\n");
                 _logBox.ScrollToCaret();
             }
+        }
+
+        private static string TrimError(string msg)
+        {
+            if (string.IsNullOrEmpty(msg)) return "Unknown error";
+            return msg.Length > 48 ? msg.Substring(0, 45) + "..." : msg;
+        }
+
+        private static int ParsePercent(string msg)
+        {
+            if (string.IsNullOrEmpty(msg)) return -1;
+            int idx = msg.IndexOf('%');
+            if (idx <= 0) return -1;
+            int end = idx - 1;
+            while (end >= 0 && msg[end] == ' ') end--;
+            int start = end;
+            while (start > 0 && char.IsDigit(msg[start - 1])) start--;
+            if (start > end) return -1;
+            if (int.TryParse(msg.Substring(start, end - start + 1), out int pct))
+                return Math.Clamp(pct, 0, 100);
+            return -1;
         }
     }
 
@@ -944,11 +1072,13 @@ namespace CornDownloader
         private bool _hasUpdate   = false;
         private readonly Color _normalBg;
         private readonly Color _checkedBg;
-        private readonly Label _statusDot;
+        private readonly Label       _statusDot;
+        private readonly ProgressBar _progressBar;
         private Label _updateBadge;
 
         public event EventHandler CheckedChanged;
 
+        [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
         public bool IsChecked
         {
             get => _checked;
@@ -977,11 +1107,20 @@ namespace CornDownloader
             {
                 var g = e.Graphics;
 
-                Color borderCol = _checked ? accent : border;
-                using (var pen = new System.Drawing.Pen(borderCol, 1.5f))
+                Color borderCol = _isInstalled
+                    ? Color.FromArgb(42, 40, 80)   // BORDER — muted when installed
+                    : _checked ? accent : border;
+
+                using (var pen = new System.Drawing.Pen(borderCol, _isInstalled ? 1f : 1.5f))
                     g.DrawRectangle(pen, 0, 0, Width - 1, Height - 1);
 
-                if (_checked)
+                // Installed: subtle green top-edge bar
+                if (_isInstalled)
+                {
+                    using (var b = new SolidBrush(Color.FromArgb(60, 76, 175, 80)))
+                        g.FillRectangle(b, 1, 1, Width - 2, 3);
+                }
+                else if (_checked)
                 {
                     using (var brush = new SolidBrush(accent))
                         g.FillRectangle(brush, Width - 22, 6, 16, 16);
@@ -1072,6 +1211,17 @@ namespace CornDownloader
                 BackColor = Color.Transparent
             };
 
+            _progressBar = new ProgressBar
+            {
+                Size     = new Size(this.Width - 20, 4),
+                Location = new Point(10, 118),
+                Style    = ProgressBarStyle.Continuous,
+                Minimum  = 0,
+                Maximum  = 100,
+                Value    = 0,
+                Visible  = false
+            };
+
             _updateBadge = new Label
             {
                 Text      = "⬆ update available",
@@ -1083,7 +1233,7 @@ namespace CornDownloader
                 Visible   = false
             };
 
-            Controls.AddRange(new Control[] { iconLbl, nameLbl, descLbl, methodBadge, catBadge, _statusDot, _updateBadge });
+            Controls.AddRange(new Control[] { iconLbl, nameLbl, descLbl, methodBadge, catBadge, _statusDot, _progressBar, _updateBadge });
 
             void Toggle(object s, EventArgs e)
             {
@@ -1112,19 +1262,56 @@ namespace CornDownloader
                 case InstallStatus.Success:
                     _statusDot.Text      = "✔ Done";
                     _statusDot.ForeColor = Color.FromArgb(34, 197, 94);
+                    _progressBar.Visible = false;
                     IsChecked = false;
                     break;
                 case InstallStatus.Failed:
                     _statusDot.Text      = "✘ Failed";
                     _statusDot.ForeColor = Color.FromArgb(239, 68, 68);
+                    _progressBar.Visible = false;
                     break;
+            }
+        }
+
+        /// <summary>
+        /// Updates the per-tile progress bar. Pass -1 to show indeterminate (marquee).
+        /// Pass 0–100 for a real percentage. Call with 100 to auto-hide.
+        /// </summary>
+        public void SetProgress(int percent)
+        {
+            if (_progressBar == null) return;
+            if (percent < 0)
+            {
+                _progressBar.Style   = ProgressBarStyle.Marquee;
+                _progressBar.Visible = true;
+            }
+            else if (percent >= 100)
+            {
+                _progressBar.Visible = false;
+            }
+            else
+            {
+                _progressBar.Style   = ProgressBarStyle.Continuous;
+                _progressBar.Value   = Math.Min(percent, 100);
+                _progressBar.Visible = true;
+                _statusDot.Text      = $"⏳ {percent}%";
+                _statusDot.ForeColor = Color.FromArgb(251, 191, 36);
             }
         }
 
         public void SetInstalled(bool installed)
         {
             _isInstalled = installed;
-            // TODO: visual treatment for installed state
+            if (installed)
+            {
+                _statusDot.Text      = "✔ Installed";
+                _statusDot.ForeColor = Color.FromArgb(34, 197, 94);
+                _statusDot.Visible   = true;
+                BackColor            = _normalBg;
+                _checked             = false;
+                Cursor               = Cursors.Default;
+            }
+            Invalidate();
         }
 
         public void SetHasUpdate(bool hasUpdate)
@@ -1206,15 +1393,15 @@ namespace CornDownloader
     // ─────────────────────────────────────────────────────────────────────────
     public class SummaryForm : Form
     {
-        private static readonly Color BG       = Color.FromArgb(13, 13, 18);
-        private static readonly Color SURFACE  = Color.FromArgb(22, 22, 30);
-        private static readonly Color SURFACE2 = Color.FromArgb(30, 30, 40);
-        private static readonly Color ACCENT   = Color.FromArgb(99, 102, 241);
-        private static readonly Color SUCCESS  = Color.FromArgb(34, 197, 94);
-        private static readonly Color DANGER   = Color.FromArgb(239, 68, 68);
-        private static readonly Color TEXT_PRI = Color.FromArgb(240, 240, 255);
-        private static readonly Color TEXT_SEC = Color.FromArgb(140, 140, 170);
-        private static readonly Color BORDER   = Color.FromArgb(40, 40, 58);
+        private static readonly Color BG       = Color.FromArgb(  8,   8,  18);
+        private static readonly Color SURFACE  = Color.FromArgb( 19,  18,  42);
+        private static readonly Color SURFACE2 = Color.FromArgb( 26,  24,  53);
+        private static readonly Color ACCENT   = Color.FromArgb(245, 200,  66);
+        private static readonly Color SUCCESS  = Color.FromArgb( 76, 175,  80);
+        private static readonly Color DANGER   = Color.FromArgb(239,  68,  68);
+        private static readonly Color TEXT_PRI = Color.FromArgb(240, 238, 252);
+        private static readonly Color TEXT_SEC = Color.FromArgb(160, 157, 192);
+        private static readonly Color BORDER   = Color.FromArgb( 42,  40,  80);
 
         public List<InstallResult> FailedResults { get; private set; } = new List<InstallResult>();
 
@@ -1418,6 +1605,49 @@ namespace CornDownloader
         {
             if (string.IsNullOrEmpty(msg)) return "Unknown error";
             return msg.Length > 48 ? msg.Substring(0, 45) + "..." : msg;
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  SETTINGS PERSISTENCE
+    // ─────────────────────────────────────────────────────────────────────────
+    internal class AppSettings
+    {
+        public string  DownloadFolder  { get; set; } = "";
+        public bool    PreferWinget    { get; set; } = true;
+        public int     WindowWidth     { get; set; } = 1180;
+        public int     WindowHeight    { get; set; } = 760;
+    }
+
+    internal static class SettingsManager
+    {
+        private static readonly string _path = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "CornStudios", "CornDownloader", "settings.json");
+
+        public static AppSettings Load()
+        {
+            try
+            {
+                if (File.Exists(_path))
+                {
+                    string json = File.ReadAllText(_path);
+                    return JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
+                }
+            }
+            catch { }
+            return new AppSettings();
+        }
+
+        public static void Save(AppSettings settings)
+        {
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
+                File.WriteAllText(_path,
+                    JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true }));
+            }
+            catch { }
         }
     }
 

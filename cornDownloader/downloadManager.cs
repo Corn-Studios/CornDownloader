@@ -57,6 +57,28 @@ namespace CornDownloader
         }
 
         /// <summary>
+        /// Runs 'winget source update' silently in the background so subsequent
+        /// installs and upgrade checks use fresh package data.
+        /// </summary>
+        public async Task RefreshSourcesAsync()
+        {
+            if (!WingetAvailable) return;
+            try
+            {
+                var psi = new ProcessStartInfo("winget", "source update")
+                {
+                    RedirectStandardOutput = true,
+                    RedirectStandardError  = true,
+                    UseShellExecute        = false,
+                    CreateNoWindow         = true
+                };
+                using var proc = Process.Start(psi);
+                await Task.Run(() => proc.WaitForExit(30_000)); // 30s timeout
+            }
+            catch { }
+        }
+
+        /// <summary>
         /// Uses 'winget export' to get a clean JSON list of all installed apps,
         /// then matches against the catalog. JSON is far more reliable than parsing
         /// the formatted table output of 'winget list'.
@@ -121,8 +143,6 @@ namespace CornDownloader
             var updatable = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (!WingetAvailable) return updatable;
 
-            string tempFile = Path.Combine(Path.GetTempPath(), $"corndownloader_upgrades_{Guid.NewGuid():N}.json");
-
             try
             {
                 // Export upgradeable packages to JSON — same reliable approach as installed scan
@@ -168,10 +188,6 @@ namespace CornDownloader
                 }
             }
             catch { }
-            finally
-            {
-                try { if (File.Exists(tempFile)) File.Delete(tempFile); } catch { }
-            }
 
             return updatable;
         }
@@ -390,8 +406,19 @@ namespace CornDownloader
                 var proc = Process.Start(psi);
                 await Task.Run(() => proc.WaitForExit());
 
-                result.Status  = InstallStatus.Success;
-                result.Message = $"Installer ran successfully.";
+                // Exit code 0 = success; many silent installers also use 1641 (reboot needed)
+                // or 3010 (reboot scheduled) as non-error codes.
+                int exitCode = proc.ExitCode;
+                if (exitCode == 0 || exitCode == 1641 || exitCode == 3010)
+                {
+                    result.Status  = InstallStatus.Success;
+                    result.Message = "Installer ran successfully.";
+                }
+                else
+                {
+                    result.Status  = InstallStatus.Failed;
+                    result.Message = $"Installer exited with code {exitCode}.";
+                }
 
                 // Clean up — delete the installer file after a successful run
                 try { if (File.Exists(destPath)) File.Delete(destPath); } catch { }
