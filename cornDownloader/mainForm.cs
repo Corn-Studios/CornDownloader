@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -31,73 +34,210 @@ namespace CornDownloader
         public static void Update(int newDpi) { if (newDpi > 0) Current = newDpi; }
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    //  TASKBAR BADGE (ITaskbarList3 COM interop)
+    // ─────────────────────────────────────────────────────────────────────────
+    internal static class TaskbarBadge
+    {
+        [ComImport, Guid("ea1afb91-9e28-4b86-90e9-9e9f8a5eefaf"),
+         InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        private interface ITaskbarList3
+        {
+            void HrInit();
+            void AddTab(IntPtr hwnd);
+            void DeleteTab(IntPtr hwnd);
+            void ActivateTab(IntPtr hwnd);
+            void SetActiveAlt(IntPtr hwnd);
+            void MarkFullscreenWindow(IntPtr hwnd, [MarshalAs(UnmanagedType.Bool)] bool fFullscreen);
+            void SetProgressValue(IntPtr hwnd, ulong ullCompleted, ulong ullTotal);
+            void SetProgressState(IntPtr hwnd, int tbpFlags);
+            void RegisterTab(IntPtr hwndTab, IntPtr hwndMDI);
+            void UnregisterTab(IntPtr hwndTab);
+            void SetTabOrder(IntPtr hwndTab, IntPtr hwndInsertBefore);
+            void SetTabActive(IntPtr hwndTab, IntPtr hwndMDI, uint dwReserved);
+            void ThumbBarAddButtons(IntPtr hwnd, uint cButtons, IntPtr pButton);
+            void ThumbBarUpdateButtons(IntPtr hwnd, uint cButtons, IntPtr pButton);
+            void ThumbBarSetImageList(IntPtr hwnd, IntPtr himl);
+            void SetOverlayIcon(IntPtr hwnd, IntPtr hIcon, [MarshalAs(UnmanagedType.LPWStr)] string pszDescription);
+            void SetThumbnailTooltip(IntPtr hwnd, [MarshalAs(UnmanagedType.LPWStr)] string pszTip);
+            void SetThumbnailClip(IntPtr hwnd, ref System.Drawing.Rectangle prcClip);
+        }
+
+        [ComImport, Guid("56fdf344-fd6d-11d0-958a-006097c9a090"),
+         ClassInterface(ClassInterfaceType.None)]
+        private class TaskbarList { }
+
+        private static ITaskbarList3 _taskbar;
+
+        static TaskbarBadge()
+        {
+            try { _taskbar = (ITaskbarList3)new TaskbarList(); _taskbar.HrInit(); }
+            catch { _taskbar = null; }
+        }
+
+        /// <summary>
+        /// Sets a numeric overlay badge on the taskbar button.
+        /// Pass 0 to clear the badge.
+        /// </summary>
+        public static void SetCount(IntPtr hwnd, int count)
+        {
+            if (_taskbar == null) return;
+            try
+            {
+                if (count <= 0)
+                {
+                    _taskbar.SetOverlayIcon(hwnd, IntPtr.Zero, null);
+                    return;
+                }
+
+                // Render a small gold-on-dark circle with the count number
+                int sz = 16;
+                using var bmp = new Bitmap(sz, sz, PixelFormat.Format32bppArgb);
+                using (var g = Graphics.FromImage(bmp))
+                {
+                    g.SmoothingMode     = SmoothingMode.AntiAlias;
+                    g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+                    g.Clear(Color.Transparent);
+
+                    using var bgBrush = new SolidBrush(Color.FromArgb(245, 200, 66));  // ACCENT gold
+                    g.FillEllipse(bgBrush, 0, 0, sz - 1, sz - 1);
+
+                    string label = count > 99 ? "99+" : count.ToString();
+                    float  fs    = label.Length > 2 ? 5.5f : 7f;
+                    using var font = new Font("Courier New", fs, FontStyle.Bold);
+                    using var tb   = new SolidBrush(Color.FromArgb(8, 8, 18));
+                    var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+                    g.DrawString(label, font, tb, new RectangleF(0, 0, sz, sz), sf);
+                }
+
+                var hIcon = bmp.GetHicon();
+                try   { _taskbar.SetOverlayIcon(hwnd, hIcon, $"{count} apps selected"); }
+                finally { DestroyIcon(hIcon); }
+            }
+            catch { }
+        }
+
+        [DllImport("user32.dll")] private static extern bool DestroyIcon(IntPtr hIcon);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  WINDOW ICON GENERATOR  (corn-coloured 🌽 bitmap → Icon)
+    // ─────────────────────────────────────────────────────────────────────────
+    internal static class AppIconBuilder
+    {
+        public static Icon Build(int size = 32)
+        {
+            using var bmp = new Bitmap(size, size, PixelFormat.Format32bppArgb);
+            using (var g = Graphics.FromImage(bmp))
+            {
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                g.Clear(Color.Transparent);
+
+                // Dark bg circle
+                using var bgBrush = new SolidBrush(Color.FromArgb(19, 18, 42));
+                g.FillEllipse(bgBrush, 0, 0, size - 1, size - 1);
+
+                // Gold ring
+                using var ring = new Pen(Color.FromArgb(245, 200, 66), size > 24 ? 1.5f : 1f);
+                g.DrawEllipse(ring, 1, 1, size - 3, size - 3);
+
+                // Corn emoji centred
+                float fs = size * 0.45f;
+                using var font = new Font("Segoe UI Emoji", fs, GraphicsUnit.Pixel);
+                var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+                g.DrawString("🌽", font, Brushes.White, new RectangleF(0, 0, size, size), sf);
+            }
+
+            return Icon.FromHandle(bmp.GetHicon());
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  SELECTION PACK  (export / import format)
+    // ─────────────────────────────────────────────────────────────────────────
+    internal class SelectionPack
+    {
+        public string Version        { get; set; } = "1";
+        public string CreatedAt      { get; set; }
+        public List<PackedApp> Apps  { get; set; } = new();
+    }
+
+    internal class PackedApp
+    {
+        public string Name          { get; set; }
+        public string PinnedVersion { get; set; }   // null = latest
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  MAIN FORM
+    // ─────────────────────────────────────────────────────────────────────────
     public class MainForm : Form
     {
-        // ── Colours — Corn Studios website palette ────────────────────────
-        private static readonly Color BG          = Color.FromArgb(  8,   8,  18);  // --bg:      #080812
-        private static readonly Color BG2         = Color.FromArgb( 13,  13,  32);  // --bg2:     #0d0d20
-        private static readonly Color SURFACE     = Color.FromArgb( 19,  18,  42);  // --surface: #13122a
-        private static readonly Color SURFACE2    = Color.FromArgb( 26,  24,  53);  // --surface2:#1a1835
-        private static readonly Color CARD        = Color.FromArgb( 16,  15,  34);  // --card:    #100f22
-        private static readonly Color ACCENT      = Color.FromArgb(245, 200,  66);  // --accent:  #f5c842 corn gold
-        private static readonly Color ACCENT_DIM  = Color.FromArgb(201, 153,  30);  // --accent-dim
-        private static readonly Color METEOR      = Color.FromArgb(244,  81,  30);  // --meteor:  #f4511e
-        private static readonly Color SUCCESS     = Color.FromArgb( 76, 175,  80);  // --corn-green
-        private static readonly Color DANGER      = Color.FromArgb(239,  68,  68);
-        private static readonly Color TEXT_PRI    = Color.FromArgb(240, 238, 252);  // --text:    #f0eefc
-        private static readonly Color TEXT_SEC    = Color.FromArgb(160, 157, 192);  // --text-dim:#a09dc0
-        private static readonly Color MUTED       = Color.FromArgb(101,  97, 160);  // --muted:   #6561a0
-        private static readonly Color BORDER      = Color.FromArgb( 42,  40,  80);  // --border:  #2a2850
-        private static readonly Color BORDER2     = Color.FromArgb( 61,  58, 112);  // --border2: #3d3a70
-        private static readonly Color SKY_PURPLE  = Color.FromArgb(124,  58, 237);  // --sky-purple
+        // ── Colours ──────────────────────────────────────────────────────────
+        private static readonly Color BG         = Color.FromArgb(  8,   8,  18);
+        private static readonly Color BG2        = Color.FromArgb( 13,  13,  32);
+        private static readonly Color SURFACE    = Color.FromArgb( 19,  18,  42);
+        private static readonly Color SURFACE2   = Color.FromArgb( 26,  24,  53);
+        private static readonly Color CARD       = Color.FromArgb( 16,  15,  34);
+        private static readonly Color ACCENT     = Color.FromArgb(245, 200,  66);
+        private static readonly Color ACCENT_DIM = Color.FromArgb(201, 153,  30);
+        private static readonly Color METEOR     = Color.FromArgb(244,  81,  30);
+        private static readonly Color SUCCESS    = Color.FromArgb( 76, 175,  80);
+        private static readonly Color DANGER     = Color.FromArgb(239,  68,  68);
+        private static readonly Color TEXT_PRI   = Color.FromArgb(240, 238, 252);
+        private static readonly Color TEXT_SEC   = Color.FromArgb(160, 157, 192);
+        private static readonly Color MUTED      = Color.FromArgb(101,  97, 160);
+        private static readonly Color BORDER     = Color.FromArgb( 42,  40,  80);
+        private static readonly Color BORDER2    = Color.FromArgb( 61,  58, 112);
+        private static readonly Color SKY_PURPLE = Color.FromArgb(124,  58, 237);
 
-        // ── State ────────────────────────────────────────────────────────────
+        // ── State ─────────────────────────────────────────────────────────────
         private readonly DownloadManager _dm;
-        private readonly Dictionary<string, Panel> _categoryPanels = new Dictionary<string, Panel>();
-        private readonly Dictionary<AppEntry, AppTile> _tiles = new Dictionary<AppEntry, AppTile>();
-        private readonly Dictionary<string, Button> _sidebarBtns   = new Dictionary<string, Button>();
+        private readonly Dictionary<AppEntry, AppTile>   _tiles        = new();
+        private readonly Dictionary<string, Button>      _sidebarBtns  = new();
+        private readonly Dictionary<AppEntry, bool>      _installedCache = new();
+        private readonly Dictionary<AppEntry, bool>      _upgradeCache   = new();
         private string _activeCategory = "All";
-        private bool _isInstalling = false;
-        private readonly Dictionary<AppEntry, bool> _installedCache = new Dictionary<AppEntry, bool>();
-        private readonly Dictionary<AppEntry, bool> _upgradeCache   = new Dictionary<AppEntry, bool>();
+        private bool   _isInstalling   = false;
+        private bool   _initialized    = false;
 
-        // ── Controls ─────────────────────────────────────────────────────────
-        private Panel        _sidebar;
-        private Panel        _mainArea;
-        private Panel        _topBar;
+        // ── Controls ──────────────────────────────────────────────────────────
+        private Panel           _sidebar;
+        private Panel           _mainArea;
+        private Panel           _topBar;
         private FlowLayoutPanel _appGrid;
-        private Panel        _bottomBar;
-        private Label        _statusLabel;
-        private Label        _selectionCountLabel;
-        private ProgressBar  _overallProgress;
-        private Button       _installBtn;
-        private Button       _clearBtn;
-        private TextBox      _searchBox;
-        private Label        _wingetBadge;
-        private TextBox      _folderBox;
-        private Button       _browseBtn;
-        private CheckBox     _preferWingetChk;
-        private RichTextBox  _logBox;
-        private Panel        _logPanel;
-        private Label        _scanStatusLabel;
+        private Panel           _bottomBar;
+        private Label           _statusLabel;
+        private Label           _selectionCountLabel;
+        private ProgressBar     _overallProgress;
+        private Button          _installBtn;
+        private Button          _upgradeBtn;
+        private Button          _clearBtn;
+        private TextBox         _searchBox;
+        private Label           _wingetBadge;
+        private TextBox         _folderBox;
+        private Button          _browseBtn;
+        private CheckBox        _preferWingetChk;
+        private RichTextBox     _logBox;
+        private Panel           _logPanel;
+        private Label           _scanStatusLabel;
 
         private readonly string[] _categories;
-
         private AppSettings _settings;
 
         public MainForm()
         {
             _settings = SettingsManager.Load();
             _dm = new DownloadManager();
-            // Build category list sorted alphabetically — matches the grid's OrderBy(g => g.Key)
             _categories = new[] { "All" }
                 .Concat(AppCatalog.All.Select(a => a.Category).Distinct().OrderBy(c => c))
                 .ToArray();
+
             InitializeComponent();
             ApplySettings();
             PopulateApps("All");
             UpdateSelectionCount();
-            _ = RunStartupAsync();  // refresh sources, then scan installed + upgrades
+            _ = RunStartupAsync();
 
             this.FormClosing += (s, e) => SaveSettings();
         }
@@ -107,23 +247,23 @@ namespace CornDownloader
             await RefreshWingetSourcesAsync();
             await ScanInstalledAsync();
             _ = ScanUpgradesAsync();
+            _initialized = true;
+            UpdateSelectionCount();   // now safe to push the real badge
         }
 
-        private Button       _upgradeBtn;
-
+        // ─────────────────────────────────────────────────────────────────────
+        //  SETTINGS
+        // ─────────────────────────────────────────────────────────────────────
         private void ApplySettings()
         {
-            // Restore window size
             if (_settings.WindowWidth > 0 && _settings.WindowHeight > 0)
                 this.Size = new Size(_settings.WindowWidth, _settings.WindowHeight);
 
-            // Restore folder path
             string folder = _settings.DownloadFolder;
             if (string.IsNullOrEmpty(folder) || !Directory.Exists(folder))
                 folder = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) + @"\Downloads";
             if (_folderBox != null) _folderBox.Text = folder;
 
-            // Restore winget preference
             if (_preferWingetChk != null)
                 _preferWingetChk.Checked = _settings.PreferWinget && _dm.WingetAvailable;
         }
@@ -143,76 +283,50 @@ namespace CornDownloader
         private async Task RefreshWingetSourcesAsync()
         {
             if (!_dm.WingetAvailable) return;
-
             this.Invoke((Action)(() =>
             {
                 if (_scanStatusLabel != null)
-                {
-                    _scanStatusLabel.Text      = "🔄 Refreshing winget sources...";
-                    _scanStatusLabel.ForeColor = TEXT_SEC;
-                }
+                { _scanStatusLabel.Text = "🔄 Refreshing winget sources..."; _scanStatusLabel.ForeColor = TEXT_SEC; }
             }));
-
             await _dm.RefreshSourcesAsync();
-
             this.Invoke((Action)(() =>
             {
                 if (_scanStatusLabel != null)
-                {
-                    _scanStatusLabel.Text      = "🔍 Scanning installed apps...";
-                    _scanStatusLabel.ForeColor = TEXT_SEC;
-                }
+                { _scanStatusLabel.Text = "🔍 Scanning installed apps..."; _scanStatusLabel.ForeColor = TEXT_SEC; }
             }));
         }
 
         // ─────────────────────────────────────────────────────────────────────
-        //  INSTALLED DETECTION
+        //  INSTALLED / UPGRADE SCAN
         // ─────────────────────────────────────────────────────────────────────
         private async Task ScanInstalledAsync()
         {
             if (!_dm.WingetAvailable) return;
-
-            // Single winget list call — returns all installed IDs at once
             var installedIds = await _dm.GetAllInstalledIdsAsync();
-
             foreach (var app in AppCatalog.All)
-            {
-                _installedCache[app] = !string.IsNullOrEmpty(app.WingetId) &&
-                                       installedIds.Contains(app.WingetId);
-            }
+                _installedCache[app] = !string.IsNullOrEmpty(app.WingetId) && installedIds.Contains(app.WingetId);
 
             this.Invoke((Action)(() =>
             {
                 foreach (var kv in _tiles)
-                {
-                    if (_installedCache.TryGetValue(kv.Key, out bool inst))
-                        kv.Value.SetInstalled(inst);
-                }
+                    if (_installedCache.TryGetValue(kv.Key, out bool inst)) kv.Value.SetInstalled(inst);
 
                 if (_scanStatusLabel != null)
                 {
-                    int installedCount = _installedCache.Values.Count(v => v);
-                    int totalCount     = AppCatalog.All.Count;
-                    _scanStatusLabel.Text      = $"✔ {installedCount}/{totalCount} apps installed";
+                    int ic = _installedCache.Values.Count(v => v);
+                    _scanStatusLabel.Text      = $"✔ {ic}/{AppCatalog.All.Count} apps installed";
                     _scanStatusLabel.ForeColor = SUCCESS;
                 }
-
                 UpdateSelectionCount();
             }));
         }
 
-        // ─────────────────────────────────────────────────────────────────────
-        //  UPGRADE DETECTION
-        // ─────────────────────────────────────────────────────────────────────
         private async Task ScanUpgradesAsync()
         {
             if (!_dm.WingetAvailable) return;
-
             var updatableIds = await _dm.GetAvailableUpdatesAsync();
-
             foreach (var app in AppCatalog.All)
-                _upgradeCache[app] = !string.IsNullOrEmpty(app.WingetId) &&
-                                     updatableIds.Contains(app.WingetId);
+                _upgradeCache[app] = !string.IsNullOrEmpty(app.WingetId) && updatableIds.Contains(app.WingetId);
 
             this.Invoke((Action)(() =>
             {
@@ -220,38 +334,23 @@ namespace CornDownloader
                 if (_upgradeBtn != null)
                 {
                     _upgradeBtn.Visible = count > 0;
-                    string plural = count == 1 ? "" : "s";
-                    _upgradeBtn.Text    = $"⬆  Update {count} App{plural}";
+                    _upgradeBtn.Text    = $"⬆  Update {count} App{(count == 1 ? "" : "s")}";
                 }
-
-                // Mark updatable tiles with a badge
                 foreach (var kv in _tiles)
-                {
-                    if (_upgradeCache.TryGetValue(kv.Key, out bool hasUpdate))
-                        kv.Value.SetHasUpdate(hasUpdate);
-                }
+                    if (_upgradeCache.TryGetValue(kv.Key, out bool u)) kv.Value.SetHasUpdate(u);
             }));
         }
 
         private async void OnUpgradeClicked(object sender, EventArgs e)
         {
             if (_isInstalling) return;
-
-            var toUpgrade = _upgradeCache
-                .Where(kv => kv.Value)
-                .Select(kv => kv.Key)
-                .ToList();
-
+            var toUpgrade = _upgradeCache.Where(kv => kv.Value).Select(kv => kv.Key).ToList();
             if (toUpgrade.Count == 0) return;
 
-            _isInstalling       = true;
-            _upgradeBtn.Enabled = false;
-            _upgradeBtn.Text    = "⏳ Updating...";
+            _isInstalling = true; _upgradeBtn.Enabled = false; _upgradeBtn.Text = "⏳ Updating...";
             _installBtn.Enabled = false;
-            _overallProgress.Maximum = toUpgrade.Count;
-            _overallProgress.Value   = 0;
+            _overallProgress.Maximum = toUpgrade.Count; _overallProgress.Value = 0;
             int done = 0;
-
             Log($"[UPGRADE] Upgrading {toUpgrade.Count} app(s) — {DateTime.Now:HH:mm:ss}");
 
             var results = new List<InstallResult>();
@@ -259,35 +358,26 @@ namespace CornDownloader
             {
                 var result = await _dm.UpgradeAsync(app, msg =>
                     this.Invoke((Action)(() =>
-                    {
-                        _statusLabel.Text = $"{app.Name}: {msg}";
-                        Log($"[{app.Name}] {msg}");
-                    })));
-
+                    { _statusLabel.Text = $"{app.Name}: {msg}"; Log($"[{app.Name}] {msg}"); _tiles[app].AppendLog(msg); })));
                 results.Add(result);
                 done++;
                 this.Invoke((Action)(() =>
                 {
                     _overallProgress.Value = done;
-                    if (_tiles.TryGetValue(app, out var tile))
-                        tile.SetStatus(result.Status);
-                    if (result.Status == InstallStatus.Success)
-                        _upgradeCache[app] = false;
+                    if (_tiles.TryGetValue(app, out var tile)) tile.SetStatus(result.Status);
+                    if (result.Status == InstallStatus.Success) _upgradeCache[app] = false;
                 }));
             }
 
-            _isInstalling       = false;
-            _installBtn.Enabled = true;
-
-            int ok   = results.Count(r => r.Status == InstallStatus.Success);
+            _isInstalling = false; _installBtn.Enabled = true;
+            int ok = results.Count(r => r.Status == InstallStatus.Success);
             int fail = results.Count(r => r.Status == InstallStatus.Failed);
             _statusLabel.Text = $"Updates done — {ok} succeeded, {fail} failed.";
             Log($"[UPGRADE DONE] {ok}/{toUpgrade.Count} — {DateTime.Now:HH:mm:ss}");
 
             int remaining = _upgradeCache.Values.Count(v => v);
             _upgradeBtn.Visible = remaining > 0;
-            string remPlural = remaining == 1 ? "" : "s";
-            _upgradeBtn.Text    = remaining > 0 ? $"⬆  Update {remaining} App{remPlural}" : "";
+            _upgradeBtn.Text    = remaining > 0 ? $"⬆  Update {remaining} App{(remaining == 1 ? "" : "s")}" : "";
             _upgradeBtn.Enabled = remaining > 0;
 
             using var summary = new SummaryForm(results);
@@ -295,21 +385,131 @@ namespace CornDownloader
         }
 
         // ─────────────────────────────────────────────────────────────────────
+        //  EXPORT / IMPORT SELECTIONS
+        // ─────────────────────────────────────────────────────────────────────
+        private void ExportSelections()
+        {
+            var selected = _tiles.Where(kv => kv.Value.IsChecked).Select(kv => kv.Key).ToList();
+            if (selected.Count == 0)
+            {
+                MessageBox.Show("No apps selected to export.", "Nothing to export",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            using var dlg = new SaveFileDialog
+            {
+                Title      = "Export app selection",
+                Filter     = "CornDownloader pack (*.corn)|*.corn|JSON (*.json)|*.json",
+                DefaultExt = "corn",
+                FileName   = $"corn-pack-{DateTime.Now:yyyy-MM-dd}"
+            };
+            if (dlg.ShowDialog() != DialogResult.OK) return;
+
+            var pack = new SelectionPack
+            {
+                CreatedAt = DateTime.Now.ToString("o"),
+                Apps = selected.Select(a => new PackedApp
+                {
+                    Name          = a.Name,
+                    PinnedVersion = a.PinnedVersion
+                }).ToList()
+            };
+
+            try
+            {
+                File.WriteAllText(dlg.FileName,
+                    JsonSerializer.Serialize(pack, new JsonSerializerOptions { WriteIndented = true }));
+                _statusLabel.Text = $"✔ Exported {selected.Count} apps.";
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Export failed:\n{ex.Message}", "Error",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void ImportSelections()
+        {
+            using var dlg = new OpenFileDialog
+            {
+                Title  = "Import app selection",
+                Filter = "CornDownloader pack (*.corn)|*.corn|JSON (*.json)|*.json|All files (*.*)|*.*"
+            };
+            if (dlg.ShowDialog() != DialogResult.OK) return;
+
+            try
+            {
+                string json = File.ReadAllText(dlg.FileName);
+                var pack = JsonSerializer.Deserialize<SelectionPack>(json,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+                if (pack?.Apps == null || pack.Apps.Count == 0)
+                {
+                    MessageBox.Show("The file contains no app selections.", "Empty pack",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                // Deselect everything first
+                foreach (var tile in _tiles.Values) tile.IsChecked = false;
+
+                int matched = 0;
+                foreach (var packed in pack.Apps)
+                {
+                    var entry = AppCatalog.All.FirstOrDefault(a =>
+                        string.Equals(a.Name, packed.Name, StringComparison.OrdinalIgnoreCase));
+                    if (entry == null) continue;
+
+                    // Apply pinned version from pack
+                    entry.PinnedVersion = packed.PinnedVersion;
+
+                    if (_tiles.TryGetValue(entry, out var tile))
+                    {
+                        tile.IsChecked = true;
+                        if (!string.IsNullOrEmpty(entry.PinnedVersion))
+                            tile.SetPinnedVersion(entry.PinnedVersion);
+                        matched++;
+                    }
+                }
+
+                UpdateSelectionCount();
+                _statusLabel.Text = $"✔ Imported {matched}/{pack.Apps.Count} apps from pack.";
+
+                if (matched < pack.Apps.Count)
+                {
+                    int missing = pack.Apps.Count - matched;
+                    MessageBox.Show(
+                        $"{missing} app{(missing == 1 ? "" : "s")} in the pack weren't found in the catalog " +
+                        $"(may have been removed or renamed).",
+                        "Partial import", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Import failed:\n{ex.Message}", "Error",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
         //  UI CONSTRUCTION
         // ─────────────────────────────────────────────────────────────────────
         private void InitializeComponent()
         {
-            // ── DPI bootstrap (must be first) ─────────────────────────────
             Dpi.Update(this);
             AutoScaleMode = AutoScaleMode.None;
 
-            this.Text          = "Corn Downloader";
-            this.Size          = new Size(Dpi.S(1180), Dpi.S(760));
-            this.MinimumSize   = new Size(Dpi.S(900),  Dpi.S(600));
-            this.BackColor     = BG;
-            this.ForeColor     = TEXT_PRI;
-            this.Font          = new Font("Courier New", 8.5f, FontStyle.Regular);
-            this.StartPosition = FormStartPosition.CenterScreen;
+            // Window icon — corn on dark circle
+            try { this.Icon = AppIconBuilder.Build(32); } catch { }
+
+            this.Text            = "Corn Downloader";
+            this.Size            = new Size(Dpi.S(1180), Dpi.S(760));
+            this.MinimumSize     = new Size(Dpi.S(900),  Dpi.S(600));
+            this.BackColor       = BG;
+            this.ForeColor       = TEXT_PRI;
+            this.Font            = new Font("Courier New", 8.5f, FontStyle.Regular);
+            this.StartPosition   = FormStartPosition.CenterScreen;
             this.FormBorderStyle = FormBorderStyle.Sizable;
 
             BuildTopBar();
@@ -321,7 +521,6 @@ namespace CornDownloader
             this.Resize += (s, e) => LayoutPanels();
             LayoutPanels();
 
-            // ── DpiChanged — rebuild sizes when window moves monitors ─────
             DpiChanged += (s, e) =>
             {
                 Dpi.Update(e.DeviceDpiNew);
@@ -333,13 +532,7 @@ namespace CornDownloader
             };
         }
 
-        /// <summary>
-        /// Re-applies DPI-scaled sizes to chrome panels after a monitor change.
-        /// </summary>
-        private void RescalePanels()
-        {
-            LayoutPanels();
-        }
+        private void RescalePanels() => LayoutPanels();
 
         private void LayoutPanels()
         {
@@ -371,7 +564,6 @@ namespace CornDownloader
         {
             _topBar = new Panel { BackColor = SURFACE, Dock = DockStyle.None };
 
-            // Gold accent bar on left edge — mirrors website's section-label line
             var accentBar = new Panel
             {
                 BackColor = ACCENT,
@@ -402,9 +594,9 @@ namespace CornDownloader
 
             _wingetBadge = new Label
             {
-                AutoSize  = true,
-                Font      = new Font("Courier New", 7.5f),
-                Location  = new Point(Dpi.S(510), Dpi.S(21))
+                AutoSize = true,
+                Font     = new Font("Courier New", 7.5f),
+                Location = new Point(Dpi.S(510), Dpi.S(21))
             };
             UpdateWingetBadge();
 
@@ -430,15 +622,9 @@ namespace CornDownloader
         private void UpdateWingetBadge()
         {
             if (_dm.WingetAvailable)
-            {
-                _wingetBadge.Text      = "✦  winget detected";
-                _wingetBadge.ForeColor = SUCCESS;
-            }
+            { _wingetBadge.Text = "✦  winget detected";       _wingetBadge.ForeColor = SUCCESS; }
             else
-            {
-                _wingetBadge.Text      = "⚠  winget not found — direct URLs only";
-                _wingetBadge.ForeColor = METEOR;
-            }
+            { _wingetBadge.Text = "⚠  winget not found — direct URLs only"; _wingetBadge.ForeColor = METEOR; }
         }
 
         // ── SIDEBAR ──────────────────────────────────────────────────────────
@@ -446,7 +632,6 @@ namespace CornDownloader
         {
             _sidebar = new Panel { BackColor = SURFACE };
 
-            // Sidebar header label — website "section-label" style
             var sideHeader = new Label
             {
                 Text      = "// CATEGORIES",
@@ -468,7 +653,6 @@ namespace CornDownloader
                 y += Dpi.S(38);
             }
 
-            // Divider line
             var divider = new Panel
             {
                 BackColor = BORDER,
@@ -478,7 +662,6 @@ namespace CornDownloader
             _sidebar.Controls.Add(divider);
             y += Dpi.S(14);
 
-            // Select-All / Deselect-All
             var selAll = CreateSmallBtn("✦ ALL", ACCENT);
             selAll.Location  = new Point(Dpi.S(8), y + Dpi.S(6));
             selAll.Width     = Dpi.S(92);
@@ -491,7 +674,6 @@ namespace CornDownloader
             deselAll.ForeColor = TEXT_SEC;
             deselAll.Click    += (s, e) => SetAllInView(false);
 
-            // Recommended preset button — styled like website's btn-primary
             var recBtn = new Button
             {
                 Text      = "★  RECOMMENDED",
@@ -511,7 +693,37 @@ namespace CornDownloader
                 UpdateSelectionCount();
             };
 
-            // Scan status label
+            // ── Export / Import buttons ──────────────────────────────────────
+            var exportBtn = new Button
+            {
+                Text      = "⬆ EXPORT",
+                Size      = new Size(Dpi.S(92), Dpi.S(26)),
+                Location  = new Point(Dpi.S(8), y + Dpi.S(82)),
+                BackColor = SURFACE2,
+                ForeColor = ACCENT,
+                FlatStyle = FlatStyle.Flat,
+                Font      = new Font("Courier New", 6.5f, FontStyle.Bold),
+                Cursor    = Cursors.Hand
+            };
+            exportBtn.FlatAppearance.BorderColor = BORDER2;
+            exportBtn.FlatAppearance.BorderSize  = 1;
+            exportBtn.Click += (s, e) => ExportSelections();
+
+            var importBtn = new Button
+            {
+                Text      = "⬇ IMPORT",
+                Size      = new Size(Dpi.S(96), Dpi.S(26)),
+                Location  = new Point(Dpi.S(106), y + Dpi.S(82)),
+                BackColor = SURFACE2,
+                ForeColor = TEXT_SEC,
+                FlatStyle = FlatStyle.Flat,
+                Font      = new Font("Courier New", 6.5f, FontStyle.Bold),
+                Cursor    = Cursors.Hand
+            };
+            importBtn.FlatAppearance.BorderColor = BORDER2;
+            importBtn.FlatAppearance.BorderSize  = 1;
+            importBtn.Click += (s, e) => ImportSelections();
+
             _scanStatusLabel = new Label
             {
                 Text      = _dm.WingetAvailable ? "🔍 scanning..." : "",
@@ -519,12 +731,12 @@ namespace CornDownloader
                 Font      = new Font("Courier New", 6.5f),
                 AutoSize  = false,
                 Size      = new Size(Dpi.S(194), Dpi.S(24)),
-                Location  = new Point(Dpi.S(8), y + Dpi.S(82)),
+                Location  = new Point(Dpi.S(8), y + Dpi.S(116)),
                 BackColor = Color.Transparent,
                 TextAlign = ContentAlignment.MiddleLeft
             };
 
-            _sidebar.Controls.AddRange(new Control[] { selAll, deselAll, recBtn, _scanStatusLabel });
+            _sidebar.Controls.AddRange(new Control[] { selAll, deselAll, recBtn, exportBtn, importBtn, _scanStatusLabel });
         }
 
         private Button CreateSidebarBtn(string category)
@@ -572,7 +784,6 @@ namespace CornDownloader
             btn.FlatAppearance.BorderColor        = active ? ACCENT : Color.FromArgb(1, 8, 8, 18);
             btn.FlatAppearance.MouseOverBackColor = Color.FromArgb(20, 245, 200, 66);
 
-            // Count badge — sits flush on the right edge
             var badge = new Label
             {
                 Text      = total.ToString(),
@@ -585,10 +796,9 @@ namespace CornDownloader
             };
             btn.Controls.Add(badge);
             void PositionBadge() => badge.Location = new Point(btn.Width - Dpi.S(32), (btn.Height - Dpi.S(14)) / 2);
-            btn.SizeChanged  += (s, e) => PositionBadge();
+            btn.SizeChanged   += (s, e) => PositionBadge();
             btn.HandleCreated += (s, e) => PositionBadge();
 
-            // Left gold bar for active state — painted on
             btn.Paint += (s, e) =>
             {
                 PositionBadge();
@@ -610,22 +820,14 @@ namespace CornDownloader
             return btn;
         }
 
-        /// <summary>
-        /// Refreshes the count badge on every sidebar button.
-        /// Shows "selected/total" in gold when anything is checked, plain total otherwise.
-        /// </summary>
         private void UpdateSidebarCounts()
         {
             foreach (var kv in _sidebarBtns)
             {
-                string cat    = kv.Key;
-                var    btn    = kv.Value;
-                int    total  = cat == "All"
-                    ? AppCatalog.All.Count
-                    : AppCatalog.All.Count(a => a.Category == cat);
-                int    sel    = _tiles
-                    .Where(t => (cat == "All" || t.Key.Category == cat) && t.Value.IsChecked)
-                    .Count();
+                string cat   = kv.Key;
+                var    btn   = kv.Value;
+                int    total = cat == "All" ? AppCatalog.All.Count : AppCatalog.All.Count(a => a.Category == cat);
+                int    sel   = _tiles.Where(t => (cat == "All" || t.Key.Category == cat) && t.Value.IsChecked).Count();
 
                 if (btn.Controls.Count > 0 && btn.Controls[0] is Label badge)
                 {
@@ -657,9 +859,7 @@ namespace CornDownloader
             {
                 if (c is Button btn && btn.Text.Contains("  "))
                 {
-                    // Extract category from button text — format is "  emoji  CATEGORY"
-                    string raw = btn.Text.Trim();
-                    // Find the category by matching against known categories
+                    string raw        = btn.Text.Trim();
                     string matchedCat = _categories.FirstOrDefault(cat =>
                         raw.EndsWith(cat.ToUpper(), StringComparison.OrdinalIgnoreCase)) ?? "";
                     bool active = matchedCat == _activeCategory;
@@ -675,16 +875,14 @@ namespace CornDownloader
         private void BuildMainArea()
         {
             _mainArea = new Panel { BackColor = BG };
-
-            _appGrid = new FlowLayoutPanel
+            _appGrid  = new FlowLayoutPanel
             {
-                AutoScroll      = true,
-                WrapContents    = true,
-                BackColor       = BG,
-                Padding         = new Padding(Dpi.S(12)),
-                Dock            = DockStyle.Fill
+                AutoScroll   = true,
+                WrapContents = true,
+                BackColor    = BG,
+                Padding      = new Padding(Dpi.S(12)),
+                Dock         = DockStyle.Fill
             };
-
             _mainArea.Controls.Add(_appGrid);
         }
 
@@ -700,31 +898,20 @@ namespace CornDownloader
             string search = _searchBox?.Text?.Trim().ToLowerInvariant() ?? "";
             if (!string.IsNullOrEmpty(search))
                 apps = apps.Where(a => a.Name.ToLowerInvariant().Contains(search) ||
-                                        a.Description.ToLowerInvariant().Contains(search));
+                                       a.Description.ToLowerInvariant().Contains(search));
 
-            var appList = apps.ToList();
-
-            // Group by category and insert section headers
-            bool showHeaders = true;
-            var groups = appList.GroupBy(a => a.Category).OrderBy(g => g.Key);
-
-            foreach (var group in groups)
+            foreach (var group in apps.ToList().GroupBy(a => a.Category).OrderBy(g => g.Key))
             {
-                if (showHeaders)
-                {
-                    var header = new SectionHeader(group.Key, CategoryEmoji(group.Key), CARD, TEXT_PRI, MUTED, ACCENT);
-                    _appGrid.Controls.Add(header);
-                    // Force header onto its own row; tiles start fresh on the next row
-                    _appGrid.SetFlowBreak(header, true);
-                }
+                var header = new SectionHeader(group.Key, CategoryEmoji(group.Key), CARD, TEXT_PRI, MUTED, ACCENT);
+                _appGrid.Controls.Add(header);
+                _appGrid.SetFlowBreak(header, true);
 
                 foreach (var app in group)
                 {
-                    bool isNew = !_tiles.TryGetValue(app, out var tile);
-                    if (isNew)
+                    if (!_tiles.TryGetValue(app, out var tile))
                     {
-                        tile = new AppTile(app, CARD, SURFACE2, ACCENT, TEXT_PRI, TEXT_SEC, BORDER);
-                        tile.IsChecked = app.IsRecommended;
+                        tile = new AppTile(app, CARD, SURFACE2, ACCENT, TEXT_PRI, TEXT_SEC, BORDER, _dm);
+                        tile.IsChecked      = false;
                         tile.CheckedChanged += (s, e) => UpdateSelectionCount();
                         _tiles[app] = tile;
                     }
@@ -747,10 +934,7 @@ namespace CornDownloader
             _                          => "📦"
         };
 
-        private void FilterApps(string query)
-        {
-            PopulateApps(_activeCategory);
-        }
+        private void FilterApps(string query) => PopulateApps(_activeCategory);
 
         private void SetAllInView(bool check)
         {
@@ -763,15 +947,12 @@ namespace CornDownloader
         private void BuildBottomBar()
         {
             _bottomBar = new Panel { BackColor = SURFACE };
-
-            // Top border line
             _bottomBar.Paint += (s, e) =>
             {
                 using var pen = new System.Drawing.Pen(BORDER, 1);
                 e.Graphics.DrawLine(pen, 0, 0, _bottomBar.Width, 0);
             };
 
-            // Row 1: folder picker
             var folderLbl = new Label
             {
                 Text      = "// SAVE TO",
@@ -808,8 +989,7 @@ namespace CornDownloader
             _browseBtn.Click += (s, e) =>
             {
                 using var dlg = new FolderBrowserDialog();
-                if (dlg.ShowDialog() == DialogResult.OK)
-                    _folderBox.Text = dlg.SelectedPath;
+                if (dlg.ShowDialog() == DialogResult.OK) _folderBox.Text = dlg.SelectedPath;
             };
 
             _preferWingetChk = new CheckBox
@@ -823,7 +1003,6 @@ namespace CornDownloader
                 Location  = new Point(Dpi.S(524), Dpi.S(14))
             };
 
-            // Row 2: progress + status
             _overallProgress = new ProgressBar
             {
                 Size     = new Size(Dpi.S(460), Dpi.S(6)),
@@ -880,7 +1059,6 @@ namespace CornDownloader
             _installBtn.FlatAppearance.BorderSize = 0;
             _installBtn.Click += OnInstallClicked;
 
-            // Log toggle
             var logToggle = new Button
             {
                 Text      = "// LOG",
@@ -902,7 +1080,6 @@ namespace CornDownloader
                 _clearBtn, _installBtn, logToggle
             });
 
-            // Log panel — terminal green on near-black, matches website code aesthetic
             _logBox = new RichTextBox
             {
                 BackColor   = Color.FromArgb(8, 8, 18),
@@ -921,7 +1098,6 @@ namespace CornDownloader
                 Height    = Dpi.S(160)
             };
 
-            // Close button inside the log panel
             var logClose = new Button
             {
                 Text      = "✗ CLOSE",
@@ -938,15 +1114,13 @@ namespace CornDownloader
             _logBox.Dock = DockStyle.Fill;
             _logPanel.Controls.Add(_logBox);
             _logPanel.Controls.Add(logClose);
-
-            // Add to the form — LayoutPanels positions it between mainArea and bottomBar
             this.Controls.Add(_logPanel);
         }
 
         private void ToggleLog()
         {
             _logPanel.Visible = !_logPanel.Visible;
-            LayoutPanels(); // reflow everything so log gets its own space
+            LayoutPanels();
             if (_logPanel.Visible)
             {
                 foreach (Control c in _logPanel.Controls)
@@ -983,19 +1157,16 @@ namespace CornDownloader
             }
 
             bool preferWinget = _preferWingetChk.Checked;
-
-            _isInstalling = true;
-            _installBtn.Enabled  = false;
-            _installBtn.Text     = "⏳ Installing...";
-            _overallProgress.Value = 0;
+            _isInstalling            = true;
+            _installBtn.Enabled      = false;
+            _installBtn.Text         = "⏳ Installing...";
+            _overallProgress.Value   = 0;
             _overallProgress.Maximum = selected.Count;
 
             Log($"[START] Installing {selected.Count} app(s) — {DateTime.Now:HH:mm:ss}");
 
             var results = await _dm.InstallAllAsync(
-                selected,
-                folder,
-                preferWinget,
+                selected, folder, preferWinget,
                 (app, status, msg) =>
                 {
                     this.Invoke((Action)(() =>
@@ -1003,25 +1174,16 @@ namespace CornDownloader
                         if (_tiles.TryGetValue(app, out var tile))
                         {
                             tile.SetStatus(status);
-
-                            // Parse a percentage out of winget/download progress lines
-                            // e.g. "Downloading ... 47%" or "Downloading: 47 %"
+                            tile.AppendLog(msg);   // ← per-app log
                             int pct = ParsePercent(msg);
-                            if (pct >= 0 &&
-                                (status == InstallStatus.Installing || status == InstallStatus.Downloading))
+                            if (pct >= 0 && (status == InstallStatus.Installing || status == InstallStatus.Downloading))
                                 tile.SetProgress(pct);
                         }
                         _statusLabel.Text = $"{app.Name}: {msg}";
                         Log($"[{app.Name}] {msg}");
                     }));
                 },
-                (done, total) =>
-                {
-                    this.Invoke((Action)(() =>
-                    {
-                        _overallProgress.Value = done;
-                    }));
-                }
+                (done, total) => this.Invoke((Action)(() => _overallProgress.Value = done))
             );
 
             int ok   = results.Count(r => r.Status == InstallStatus.Success);
@@ -1034,40 +1196,30 @@ namespace CornDownloader
 
             Log($"[DONE] {ok}/{selected.Count} succeeded — {DateTime.Now:HH:mm:ss}");
 
-            // Show summary — loop allows retry of failed apps
             var pendingResults = results;
             while (true)
             {
                 using var summary = new SummaryForm(pendingResults);
                 var dr = summary.ShowDialog(this);
+                if (dr != DialogResult.Retry || summary.FailedResults.Count == 0) break;
 
-                if (dr != DialogResult.Retry || summary.FailedResults.Count == 0)
-                    break;
-
-                // Re-run only the failed apps
                 var retryApps = summary.FailedResults.Select(r => r.App).ToList();
                 Log($"[RETRY] Retrying {retryApps.Count} failed app(s)...");
 
-                _isInstalling = true;
-                _installBtn.Enabled = false;
-                _installBtn.Text = "⏳ Retrying...";
-                _overallProgress.Maximum = retryApps.Count;
-                _overallProgress.Value   = 0;
+                _isInstalling = true; _installBtn.Enabled = false; _installBtn.Text = "⏳ Retrying...";
+                _overallProgress.Maximum = retryApps.Count; _overallProgress.Value = 0;
 
                 pendingResults = await _dm.InstallAllAsync(
                     retryApps, folder, preferWinget,
                     (app, status, msg) => this.Invoke((Action)(() =>
                     {
-                        if (_tiles.TryGetValue(app, out var tile)) tile.SetStatus(status);
+                        if (_tiles.TryGetValue(app, out var tile)) { tile.SetStatus(status); tile.AppendLog(msg); }
                         _statusLabel.Text = $"{app.Name}: {msg}";
                         Log($"[{app.Name}] {msg}");
                     })),
-                    (done2, total2) => this.Invoke((Action)(() =>
-                        _overallProgress.Value = done2)));
+                    (done2, total2) => this.Invoke((Action)(() => _overallProgress.Value = done2)));
 
-                _isInstalling = false;
-                _installBtn.Enabled = true;
-                _installBtn.Text    = "⬇  INSTALL";
+                _isInstalling = false; _installBtn.Enabled = true; _installBtn.Text = "⬇  INSTALL";
             }
         }
 
@@ -1076,12 +1228,15 @@ namespace CornDownloader
             int count = _tiles.Values.Count(t => t.IsChecked);
             if (_selectionCountLabel != null)
             {
-                string appPlural = count == 1 ? "" : "s";
                 _selectionCountLabel.Text = count == 0
                     ? "no apps selected"
-                    : $"{count} app{appPlural} selected";
+                    : $"{count} app{(count == 1 ? "" : "s")} selected";
             }
             UpdateSidebarCounts();
+
+            // Update taskbar badge — only after startup so pre-checked defaults don't show
+            if (_initialized)
+                try { TaskbarBadge.SetCount(this.Handle, count); } catch { }
         }
 
         private void Log(string msg)
@@ -1093,12 +1248,6 @@ namespace CornDownloader
                 _logBox.AppendText(msg + "\n");
                 _logBox.ScrollToCaret();
             }
-        }
-
-        private static string TrimError(string msg)
-        {
-            if (string.IsNullOrEmpty(msg)) return "Unknown error";
-            return msg.Length > 48 ? msg.Substring(0, 45) + "..." : msg;
         }
 
         private static int ParsePercent(string msg)
@@ -1118,18 +1267,40 @@ namespace CornDownloader
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    //  APP TILE CONTROL
+    //  APP TILE CONTROL  (with version picker + collapsible per-app log)
     // ─────────────────────────────────────────────────────────────────────────
     public class AppTile : Panel
     {
-        private bool _checked;
-        private bool _isInstalled = false;
-        private bool _hasUpdate   = false;
+        // ── Colours (mirrored locally for sub-control painters) ───────────────
+        private static readonly Color _accent  = Color.FromArgb(245, 200,  66);
+        private static readonly Color _muted   = Color.FromArgb(101,  97, 160);
+        private static readonly Color _border2 = Color.FromArgb( 61,  58, 112);
+        private static readonly Color _bg      = Color.FromArgb(  8,   8,  18);
+        private static readonly Color _surface = Color.FromArgb( 19,  18,  42);
+
+        private bool   _checked;
+        private bool   _isInstalled = false;
+        private bool   _hasUpdate   = false;
+        private bool   _logExpanded = false;
+
         private readonly Color _normalBg;
         private readonly Color _checkedBg;
+        private readonly AppEntry   _app;
+        private readonly DownloadManager _dm;
+
+        // Sub-controls
         private readonly Label       _statusDot;
         private readonly ProgressBar _progressBar;
-        private Label _updateBadge;
+        private          Label       _updateBadge;
+        private          ComboBox    _versionPicker;
+        private          Button      _versionToggle;
+        private          RichTextBox _tileLog;
+        private          Panel       _logDrawer;
+        private          Button      _logToggleBtn;
+
+        private const int BASE_HEIGHT     = 125;   // collapsed tile height (logical px)
+        private const int LOG_HEIGHT      = 90;    // log drawer height (logical px)
+        private const int VERSION_OFFSET  = 22;    // extra height when version picker visible
 
         public event EventHandler CheckedChanged;
 
@@ -1148,47 +1319,47 @@ namespace CornDownloader
         }
 
         public AppTile(AppEntry app, Color normalBg, Color checkedBg, Color accent,
-                       Color textPri, Color textSec, Color border)
+                       Color textPri, Color textSec, Color border, DownloadManager dm)
         {
-            _normalBg   = normalBg;
-            _checkedBg  = checkedBg;
+            _app       = app;
+            _dm        = dm;
+            _normalBg  = normalBg;
+            _checkedBg = checkedBg;
 
-            Size      = new Size(Dpi.S(230), Dpi.S(125));
+            Size      = new Size(Dpi.S(230), Dpi.S(BASE_HEIGHT));
             BackColor = normalBg;
             Margin    = new Padding(Dpi.S(6));
             Cursor    = Cursors.Hand;
 
+            // ── Border + checkmark paint ──────────────────────────────────────
             this.Paint += (s, e) =>
             {
                 var g = e.Graphics;
-
-                Color borderCol = _isInstalled
-                    ? Color.FromArgb(42, 40, 80)   // BORDER — muted when installed
+                Color borderCol = _isInstalled ? Color.FromArgb(42, 40, 80)
                     : _checked ? accent : border;
-
                 using (var pen = new System.Drawing.Pen(borderCol, _isInstalled ? 1f : 1.5f))
                     g.DrawRectangle(pen, 0, 0, Width - 1, Height - 1);
 
-                // Installed: subtle green top-edge bar
                 if (_isInstalled)
                 {
-                    using (var b = new SolidBrush(Color.FromArgb(60, 76, 175, 80)))
-                        g.FillRectangle(b, 1, 1, Width - 2, Dpi.S(3));
+                    using var b = new SolidBrush(Color.FromArgb(60, 76, 175, 80));
+                    g.FillRectangle(b, 1, 1, Width - 2, Dpi.S(3));
                 }
                 else if (_checked)
                 {
-                    using (var brush = new SolidBrush(accent))
-                        g.FillRectangle(brush, Width - Dpi.S(22), Dpi.S(6), Dpi.S(16), Dpi.S(16));
-                    using (var whitePen = new System.Drawing.Pen(Color.White, 2f))
-                        g.DrawLines(whitePen, new[]
-                        {
-                            new Point(Width - Dpi.S(19), Dpi.S(14)),
-                            new Point(Width - Dpi.S(15), Dpi.S(18)),
-                            new Point(Width - Dpi.S(9),  Dpi.S(9))
-                        });
+                    using var brush = new SolidBrush(accent);
+                    g.FillRectangle(brush, Width - Dpi.S(22), Dpi.S(6), Dpi.S(16), Dpi.S(16));
+                    using var whitePen = new System.Drawing.Pen(Color.White, 2f);
+                    g.DrawLines(whitePen, new[]
+                    {
+                        new Point(Width - Dpi.S(19), Dpi.S(14)),
+                        new Point(Width - Dpi.S(15), Dpi.S(18)),
+                        new Point(Width - Dpi.S(9),  Dpi.S(9))
+                    });
                 }
             };
 
+            // ── Icon ─────────────────────────────────────────────────────────
             var iconLbl = new Label
             {
                 Text      = app.IconChar,
@@ -1200,6 +1371,7 @@ namespace CornDownloader
                 TextAlign = ContentAlignment.MiddleCenter
             };
 
+            // ── Name ─────────────────────────────────────────────────────────
             var nameLbl = new Label
             {
                 Text         = app.Name,
@@ -1213,6 +1385,7 @@ namespace CornDownloader
                 UseMnemonic  = false
             };
 
+            // ── Description ──────────────────────────────────────────────────
             var descLbl = new Label
             {
                 Text      = app.Description,
@@ -1224,11 +1397,11 @@ namespace CornDownloader
                 BackColor = Color.Transparent
             };
 
-            // Method badge — website "tag" style with border
+            // ── Method badge ─────────────────────────────────────────────────
             string method  = app.WingetId != null ? "winget" : "direct";
             Color  badgeFg = app.WingetId != null
-                ? Color.FromArgb(245, 200, 66)   // gold for winget
-                : Color.FromArgb(160, 157, 192);  // muted for direct
+                ? Color.FromArgb(245, 200, 66)
+                : Color.FromArgb(160, 157, 192);
 
             var methodBadge = new Label
             {
@@ -1240,7 +1413,6 @@ namespace CornDownloader
                 Location  = new Point(Dpi.S(10), Dpi.S(50)),
                 Padding   = new Padding(Dpi.S(2), Dpi.S(1), Dpi.S(2), Dpi.S(1))
             };
-            // Draw border on badge via Paint
             methodBadge.Paint += (s, e) =>
             {
                 using var pen = new System.Drawing.Pen(Color.FromArgb(61, 58, 112), 1);
@@ -1257,6 +1429,7 @@ namespace CornDownloader
                 Location  = new Point(methodBadge.PreferredWidth + Dpi.S(16), Dpi.S(52))
             };
 
+            // ── Status dot ───────────────────────────────────────────────────
             _statusDot = new Label
             {
                 Text      = "",
@@ -1266,17 +1439,17 @@ namespace CornDownloader
                 BackColor = Color.Transparent
             };
 
+            // ── Progress bar ─────────────────────────────────────────────────
             _progressBar = new ProgressBar
             {
                 Size     = new Size(this.Width - Dpi.S(20), Dpi.S(4)),
                 Location = new Point(Dpi.S(10), Dpi.S(118)),
                 Style    = ProgressBarStyle.Continuous,
-                Minimum  = 0,
-                Maximum  = 100,
-                Value    = 0,
+                Minimum  = 0, Maximum = 100, Value = 0,
                 Visible  = false
             };
 
+            // ── Update badge ─────────────────────────────────────────────────
             _updateBadge = new Label
             {
                 Text      = "⬆ update available",
@@ -1288,8 +1461,105 @@ namespace CornDownloader
                 Visible   = false
             };
 
-            Controls.AddRange(new Control[] { iconLbl, nameLbl, descLbl, methodBadge, catBadge, _statusDot, _progressBar, _updateBadge });
+            // ── Version picker (winget only) ──────────────────────────────────
+            if (app.WingetId != null)
+            {
+                _versionToggle = new Button
+                {
+                    Text      = "ver ▾",
+                    Size      = new Size(Dpi.S(44), Dpi.S(16)),
+                    Location  = new Point(Width - Dpi.S(50), Dpi.S(50)),
+                    BackColor = Color.Transparent,
+                    ForeColor = _muted,
+                    FlatStyle = FlatStyle.Flat,
+                    Font      = new Font("Courier New", 5.5f),
+                    Cursor    = Cursors.Hand,
+                    Anchor    = AnchorStyles.Top | AnchorStyles.Right
+                };
+                _versionToggle.FlatAppearance.BorderColor = _border2;
+                _versionToggle.FlatAppearance.BorderSize  = 1;
+                _versionToggle.Click += OnVersionToggleClicked;
 
+                _versionPicker = new ComboBox
+                {
+                    DropDownStyle  = ComboBoxStyle.DropDownList,
+                    BackColor      = _bg,
+                    ForeColor      = _accent,
+                    Font           = new Font("Courier New", 6.5f),
+                    Size           = new Size(Dpi.S(210), Dpi.S(20)),
+                    Location       = new Point(Dpi.S(10), Dpi.S(BASE_HEIGHT - 4)),
+                    Visible        = false,
+                    Anchor         = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
+                };
+                _versionPicker.Items.Add("latest (default)");
+                if (!string.IsNullOrEmpty(app.PinnedVersion))
+                    _versionPicker.Items.Add(app.PinnedVersion);
+                _versionPicker.SelectedIndex = 0;
+
+                _versionPicker.SelectedIndexChanged += (s, e) =>
+                {
+                    int idx = _versionPicker.SelectedIndex;
+                    _app.PinnedVersion = (idx == 0 || _versionPicker.Items[idx].ToString() == "latest (default)")
+                        ? null
+                        : _versionPicker.Items[idx].ToString();
+                    _versionToggle.ForeColor = _app.PinnedVersion != null ? _accent : _muted;
+                    _versionToggle.Text      = _app.PinnedVersion != null
+                        ? $"v{_app.PinnedVersion.Split('.')[0]}▾"
+                        : "ver ▾";
+                };
+            }
+
+            // ── Per-app log drawer ────────────────────────────────────────────
+            _logToggleBtn = new Button
+            {
+                Text      = "log ▸",
+                Size      = new Size(Dpi.S(38), Dpi.S(16)),
+                Location  = new Point(Dpi.S(10), Dpi.S(104)),
+                BackColor = Color.Transparent,
+                ForeColor = _muted,
+                FlatStyle = FlatStyle.Flat,
+                Font      = new Font("Courier New", 5.5f),
+                Cursor    = Cursors.Hand,
+                Visible   = false    // shown once there's log output
+            };
+            _logToggleBtn.FlatAppearance.BorderSize = 0;
+            _logToggleBtn.Click += OnLogToggleClicked;
+
+            _tileLog = new RichTextBox
+            {
+                BackColor   = _bg,
+                ForeColor   = Color.FromArgb(100, 245, 200, 66),   // dim gold
+                BorderStyle = BorderStyle.None,
+                ReadOnly    = true,
+                Font        = new Font("Courier New", 6f),
+                ScrollBars  = RichTextBoxScrollBars.Vertical,
+                Visible     = false
+            };
+
+            _logDrawer = new Panel
+            {
+                BackColor = Color.FromArgb(12, 11, 28),
+                Visible   = false,
+                Location  = new Point(0, Dpi.S(BASE_HEIGHT)),
+                Size      = new Size(this.Width, Dpi.S(LOG_HEIGHT))
+            };
+            // Top border on drawer
+            _logDrawer.Paint += (s, e) =>
+            {
+                using var pen = new System.Drawing.Pen(Color.FromArgb(42, 40, 80), 1);
+                e.Graphics.DrawLine(pen, 0, 0, _logDrawer.Width, 0);
+            };
+            _tileLog.Dock = DockStyle.Fill;
+            _logDrawer.Controls.Add(_tileLog);
+
+            // ── Assemble ──────────────────────────────────────────────────────
+            var ctrls = new List<Control> { iconLbl, nameLbl, descLbl, methodBadge, catBadge,
+                                            _statusDot, _progressBar, _updateBadge, _logToggleBtn, _logDrawer };
+            if (_versionToggle != null)  ctrls.Add(_versionToggle);
+            if (_versionPicker != null)  ctrls.Add(_versionPicker);
+            Controls.AddRange(ctrls.ToArray());
+
+            // ── Click-to-toggle ───────────────────────────────────────────────
             void Toggle(object s, EventArgs e)
             {
                 if (_isInstalled) return;
@@ -1305,52 +1575,114 @@ namespace CornDownloader
             this.MouseLeave += (s, e) => { if (!_checked) BackColor = _normalBg; };
         }
 
+        // ── Version picker toggle ─────────────────────────────────────────────
+        private async void OnVersionToggleClicked(object sender, EventArgs e)
+        {
+            if (_versionPicker == null) return;
+
+            bool show = !_versionPicker.Visible;
+
+            if (show && _versionPicker.Items.Count <= 1)
+            {
+                // Lazy-load versions from winget on first open
+                _versionToggle.Text    = "...";
+                _versionToggle.Enabled = false;
+                var versions = await _dm.GetAvailableVersionsAsync(_app);
+                _versionPicker.Items.Clear();
+                _versionPicker.Items.Add("latest (default)");
+                foreach (var v in versions) _versionPicker.Items.Add(v);
+                // Re-select pinned version if it exists
+                if (!string.IsNullOrEmpty(_app.PinnedVersion))
+                {
+                    int idx = _versionPicker.Items.IndexOf(_app.PinnedVersion);
+                    _versionPicker.SelectedIndex = idx >= 0 ? idx : 0;
+                }
+                else _versionPicker.SelectedIndex = 0;
+                _versionToggle.Enabled = true;
+                _versionToggle.Text    = _app.PinnedVersion != null ? $"v{_app.PinnedVersion.Split('.')[0]}▾" : "ver ▾";
+            }
+
+            _versionPicker.Visible = show;
+            int extraH = show ? Dpi.S(VERSION_OFFSET) : 0;
+            int logH   = _logExpanded ? Dpi.S(LOG_HEIGHT) : 0;
+            Height = Dpi.S(BASE_HEIGHT) + extraH + logH;
+            _logDrawer.Location = new Point(0, Dpi.S(BASE_HEIGHT) + extraH);
+            _versionPicker.Location = new Point(Dpi.S(10), Dpi.S(BASE_HEIGHT) - Dpi.S(4));
+        }
+
+        // ── Per-app log toggle ────────────────────────────────────────────────
+        private void OnLogToggleClicked(object sender, EventArgs e)
+        {
+            _logExpanded = !_logExpanded;
+            _logDrawer.Visible    = _logExpanded;
+            _logToggleBtn.Text    = _logExpanded ? "log ▾" : "log ▸";
+
+            int verH = (_versionPicker != null && _versionPicker.Visible) ? Dpi.S(VERSION_OFFSET) : 0;
+            Height = Dpi.S(BASE_HEIGHT) + verH + (_logExpanded ? Dpi.S(LOG_HEIGHT) : 0);
+            _logDrawer.Location = new Point(0, Dpi.S(BASE_HEIGHT) + verH);
+        }
+
+        // ── Public API ────────────────────────────────────────────────────────
+
+        /// <summary>Appends a line to this tile's per-app log and makes the toggle visible.</summary>
+        public void AppendLog(string msg)
+        {
+            if (string.IsNullOrWhiteSpace(msg)) return;
+            if (_tileLog.InvokeRequired)
+            {
+                _tileLog.Invoke((Action)(() => AppendLog(msg)));
+                return;
+            }
+            _tileLog.AppendText(msg + "\n");
+            _tileLog.ScrollToCaret();
+            if (!_logToggleBtn.Visible)
+            {
+                _logToggleBtn.Visible   = true;
+                _statusDot.Visible      = false;   // log button takes the status-dot row
+                _updateBadge.Visible    = false;
+            }
+        }
+
         public void SetStatus(InstallStatus status)
         {
             switch (status)
             {
                 case InstallStatus.Installing:
                 case InstallStatus.Downloading:
-                    _statusDot.Text      = "⏳ Installing...";
-                    _statusDot.ForeColor = Color.FromArgb(251, 191, 36);
+                    if (!_logToggleBtn.Visible) { _statusDot.Text = "⏳ Installing..."; _statusDot.ForeColor = Color.FromArgb(251, 191, 36); }
                     break;
                 case InstallStatus.Success:
-                    _statusDot.Text      = "✔ Done";
-                    _statusDot.ForeColor = Color.FromArgb(34, 197, 94);
-                    _progressBar.Visible = false;
+                    _logToggleBtn.ForeColor  = Color.FromArgb(34, 197, 94);
+                    _logToggleBtn.Text       = _logExpanded ? "log ▾" : "log ▸";
+                    _statusDot.Text          = "✔ Done";
+                    _statusDot.ForeColor     = Color.FromArgb(34, 197, 94);
+                    _statusDot.Visible       = !_logToggleBtn.Visible;
+                    _progressBar.Visible     = false;
                     IsChecked = false;
                     break;
                 case InstallStatus.Failed:
-                    _statusDot.Text      = "✘ Failed";
-                    _statusDot.ForeColor = Color.FromArgb(239, 68, 68);
-                    _progressBar.Visible = false;
+                    _logToggleBtn.ForeColor  = Color.FromArgb(239, 68, 68);
+                    _statusDot.Text          = "✘ Failed";
+                    _statusDot.ForeColor     = Color.FromArgb(239, 68, 68);
+                    _statusDot.Visible       = !_logToggleBtn.Visible;
+                    _progressBar.Visible     = false;
                     break;
             }
         }
 
-        /// <summary>
-        /// Updates the per-tile progress bar. Pass -1 to show indeterminate (marquee).
-        /// Pass 0–100 for a real percentage. Call with 100 to auto-hide.
-        /// </summary>
         public void SetProgress(int percent)
         {
             if (_progressBar == null) return;
             if (percent < 0)
-            {
-                _progressBar.Style   = ProgressBarStyle.Marquee;
-                _progressBar.Visible = true;
-            }
+            { _progressBar.Style = ProgressBarStyle.Marquee; _progressBar.Visible = true; }
             else if (percent >= 100)
-            {
-                _progressBar.Visible = false;
-            }
+            { _progressBar.Visible = false; }
             else
             {
                 _progressBar.Style   = ProgressBarStyle.Continuous;
                 _progressBar.Value   = Math.Min(percent, 100);
                 _progressBar.Visible = true;
-                _statusDot.Text      = $"⏳ {percent}%";
-                _statusDot.ForeColor = Color.FromArgb(251, 191, 36);
+                if (!_logToggleBtn.Visible) { _statusDot.Text = $"⏳ {percent}%"; _statusDot.ForeColor = Color.FromArgb(251, 191, 36); }
             }
         }
 
@@ -1374,10 +1706,24 @@ namespace CornDownloader
             _hasUpdate = hasUpdate;
             if (_updateBadge != null)
             {
-                _updateBadge.Visible = hasUpdate;
-                _statusDot.Visible   = !hasUpdate;
+                _updateBadge.Visible = hasUpdate && !_logToggleBtn.Visible;
+                if (!hasUpdate) _statusDot.Visible = !_logToggleBtn.Visible;
             }
             Invalidate();
+        }
+
+        /// <summary>Called by import to reflect an externally-pinned version in the picker UI.</summary>
+        public void SetPinnedVersion(string version)
+        {
+            if (_versionPicker == null) return;
+            int idx = _versionPicker.Items.IndexOf(version);
+            if (idx < 0) { _versionPicker.Items.Add(version); idx = _versionPicker.Items.Count - 1; }
+            _versionPicker.SelectedIndex = idx;
+            if (_versionToggle != null)
+            {
+                _versionToggle.Text      = $"v{version.Split('.')[0]}▾";
+                _versionToggle.ForeColor = _accent;
+            }
         }
     }
 
@@ -1402,8 +1748,7 @@ namespace CornDownloader
             };
             this.ParentChanged += (s, e) =>
             {
-                if (_lastParent != null)
-                    _lastParent.ClientSizeChanged -= syncHandler;
+                if (_lastParent != null) _lastParent.ClientSizeChanged -= syncHandler;
                 _lastParent = Parent;
                 if (_lastParent != null)
                 {
@@ -1412,7 +1757,6 @@ namespace CornDownloader
                 }
             };
 
-            // Gold left bar — website "section-label" style
             var bar = new Panel
             {
                 BackColor = accent,
@@ -1420,7 +1764,6 @@ namespace CornDownloader
                 Location  = new Point(Dpi.S(4), Dpi.S(13))
             };
 
-            // Monospace label — mirrors website's "01 — Projects" style
             var lbl = new Label
             {
                 Text      = $"{emoji}  {title.ToUpper()}",
@@ -1433,7 +1776,6 @@ namespace CornDownloader
 
             this.Paint += (s, e) =>
             {
-                // Gradient line after the label — matches website's ::after line
                 int lineY = Height / 2 + 2;
                 using var pen = new System.Drawing.Pen(Color.FromArgb(42, 40, 80), 1);
                 e.Graphics.DrawLine(pen, lbl.Right + Dpi.S(14), lineY, Width - Dpi.S(20), lineY);
@@ -1458,82 +1800,61 @@ namespace CornDownloader
         private static readonly Color TEXT_SEC = Color.FromArgb(160, 157, 192);
         private static readonly Color BORDER   = Color.FromArgb( 42,  40,  80);
 
-        public List<InstallResult> FailedResults { get; private set; } = new List<InstallResult>();
+        public List<InstallResult> FailedResults { get; private set; } = new();
 
         public SummaryForm(List<InstallResult> results)
         {
             int ok   = results.Count(r => r.Status == InstallStatus.Success);
             int fail = results.Count(r => r.Status == InstallStatus.Failed);
 
-            Text             = "// INSTALL SUMMARY";
-            Size             = new Size(Dpi.S(560), Dpi.S(540));
-            MinimumSize      = new Size(Dpi.S(440), Dpi.S(400));
-            BackColor        = BG;
-            ForeColor        = TEXT_PRI;
-            Font             = new Font("Courier New", 8.5f);
-            StartPosition    = FormStartPosition.CenterParent;
-            FormBorderStyle  = FormBorderStyle.FixedDialog;
-            MaximizeBox      = false;
+            Text            = "// INSTALL SUMMARY";
+            Size            = new Size(Dpi.S(560), Dpi.S(540));
+            MinimumSize     = new Size(Dpi.S(440), Dpi.S(400));
+            BackColor       = BG;
+            ForeColor       = TEXT_PRI;
+            Font            = new Font("Courier New", 8.5f);
+            StartPosition   = FormStartPosition.CenterParent;
+            FormBorderStyle = FormBorderStyle.FixedDialog;
+            MaximizeBox     = false;
 
-            // ── Header ───────────────────────────────────────────────────────
-            var header = new Panel
-            {
-                BackColor = SURFACE,
-                Dock      = DockStyle.Top,
-                Height    = Dpi.S(70)
-            };
+            try { this.Icon = AppIconBuilder.Build(32); } catch { }
 
+            var header = new Panel { BackColor = SURFACE, Dock = DockStyle.Top, Height = Dpi.S(70) };
             bool allOk = fail == 0;
-            string instPlural = fail == 1 ? "" : "s";
-            var titleLbl = new Label
+            header.Controls.Add(new Label
             {
-                Text      = allOk ? "✔  All apps installed!" : $"⚠  {fail} installation{instPlural} failed",
+                Text      = allOk ? "✔  All apps installed!" : $"⚠  {fail} installation{(fail == 1 ? "" : "s")} failed",
                 Font      = new Font("Courier New", 11f, FontStyle.Bold),
                 ForeColor = allOk ? SUCCESS : DANGER,
                 AutoSize  = true,
                 Location  = new Point(Dpi.S(18), Dpi.S(14))
-            };
-
-            var subLbl = new Label
+            });
+            header.Controls.Add(new Label
             {
                 Text      = $"{ok} succeeded   •   {fail} failed   •   {results.Count} total",
                 Font      = new Font("Courier New", 8.5f),
                 ForeColor = TEXT_SEC,
                 AutoSize  = true,
                 Location  = new Point(Dpi.S(20), Dpi.S(42))
-            };
+            });
 
-            header.Controls.AddRange(new Control[] { titleLbl, subLbl });
-
-            // ── Scroll area ──────────────────────────────────────────────────
             var scroll = new Panel
             {
-                AutoScroll = true,
-                BackColor  = BG,
-                Dock       = DockStyle.Fill,
+                AutoScroll = true, BackColor = BG, Dock = DockStyle.Fill,
                 Padding    = new Padding(Dpi.S(14), Dpi.S(10), Dpi.S(14), Dpi.S(10))
             };
 
             int y = Dpi.S(10);
-
-            // Successes
             if (ok > 0)
             {
-                scroll.Controls.Add(MakeSectionLabel("Installed successfully", SUCCESS, y));
-                y += Dpi.S(28);
+                scroll.Controls.Add(MakeSectionLabel("Installed successfully", SUCCESS, y)); y += Dpi.S(28);
                 foreach (var r in results.Where(r => r.Status == InstallStatus.Success))
-                {
-                    scroll.Controls.Add(MakeResultRow(r.App.IconChar, r.App.Name, "✔", SUCCESS, y));
-                    y += Dpi.S(38);
-                }
+                { scroll.Controls.Add(MakeResultRow(r.App.IconChar, r.App.Name, "✔", SUCCESS, y)); y += Dpi.S(38); }
                 y += Dpi.S(8);
             }
-
-            // Failures
             if (fail > 0)
             {
-                scroll.Controls.Add(MakeSectionLabel("Failed", DANGER, y));
-                y += Dpi.S(28);
+                scroll.Controls.Add(MakeSectionLabel("Failed", DANGER, y)); y += Dpi.S(28);
                 foreach (var r in results.Where(r => r.Status == InstallStatus.Failed))
                 {
                     FailedResults.Add(r);
@@ -1542,33 +1863,20 @@ namespace CornDownloader
                     y += Dpi.S(38);
                 }
             }
+            scroll.Controls.Add(new Panel { Height = Dpi.S(10), Top = y, BackColor = Color.Transparent });
 
-            // Pad the scroll area
-            var spacer = new Panel { Height = Dpi.S(10), Top = y, BackColor = Color.Transparent };
-            scroll.Controls.Add(spacer);
-
-            // ── Footer ───────────────────────────────────────────────────────
-            var footer = new Panel
-            {
-                BackColor = SURFACE,
-                Dock      = DockStyle.Bottom,
-                Height    = Dpi.S(58)
-            };
-
+            var footer = new Panel { BackColor = SURFACE, Dock = DockStyle.Bottom, Height = Dpi.S(58) };
             var closeBtn = new Button
             {
                 Text      = "Close",
                 Size      = new Size(Dpi.S(100), Dpi.S(34)),
-                BackColor = SURFACE2,
-                ForeColor = TEXT_PRI,
-                FlatStyle = FlatStyle.Flat,
-                Cursor    = Cursors.Hand,
+                BackColor = SURFACE2, ForeColor = TEXT_PRI,
+                FlatStyle = FlatStyle.Flat, Cursor = Cursors.Hand,
                 Anchor    = AnchorStyles.Right | AnchorStyles.Top
             };
             closeBtn.FlatAppearance.BorderColor = BORDER;
             closeBtn.Location = new Point(this.ClientSize.Width - Dpi.S(118), Dpi.S(12));
             closeBtn.Click   += (s, e) => { DialogResult = DialogResult.Cancel; Close(); };
-
             footer.Controls.Add(closeBtn);
 
             if (fail > 0)
@@ -1577,8 +1885,7 @@ namespace CornDownloader
                 {
                     Text      = $"↺  Retry {fail} Failed",
                     Size      = new Size(Dpi.S(140), Dpi.S(34)),
-                    BackColor = DANGER,
-                    ForeColor = Color.White,
+                    BackColor = DANGER, ForeColor = Color.White,
                     FlatStyle = FlatStyle.Flat,
                     Font      = new Font("Courier New", 8.5f, FontStyle.Bold),
                     Cursor    = Cursors.Hand
@@ -1594,13 +1901,8 @@ namespace CornDownloader
 
         private Label MakeSectionLabel(string text, Color color, int y) => new Label
         {
-            Text      = text.ToUpperInvariant(),
-            Font      = new Font("Courier New", 7f, FontStyle.Bold),
-            ForeColor = color,
-            AutoSize  = true,
-            Top       = y,
-            Left      = Dpi.S(2),
-            BackColor = Color.Transparent
+            Text = text.ToUpperInvariant(), Font = new Font("Courier New", 7f, FontStyle.Bold),
+            ForeColor = color, AutoSize = true, Top = y, Left = Dpi.S(2), BackColor = Color.Transparent
         };
 
         private Panel MakeResultRow(string icon, string name, string statusText, Color statusColor, int y)
@@ -1609,58 +1911,40 @@ namespace CornDownloader
             {
                 BackColor = SURFACE,
                 Size      = new Size(Dpi.S(490), Dpi.S(32)),
-                Top       = y,
-                Left      = 0
+                Top = y, Left = 0
             };
-
             row.Paint += (s, e) =>
             {
                 using var pen = new System.Drawing.Pen(BORDER, 1);
                 e.Graphics.DrawRectangle(pen, 0, 0, row.Width - 1, row.Height - 1);
             };
-
-            var iconLbl = new Label
+            row.Controls.Add(new Label
             {
-                Text      = icon,
-                Font      = new Font("Segoe UI Emoji", 11f),
-                AutoSize  = false,
-                Size      = new Size(Dpi.S(28), Dpi.S(28)),
-                Location  = new Point(Dpi.S(4), Dpi.S(2)),
-                BackColor = Color.Transparent,
+                Text = icon, Font = new Font("Segoe UI Emoji", 11f),
+                AutoSize = false, Size = new Size(Dpi.S(28), Dpi.S(28)),
+                Location = new Point(Dpi.S(4), Dpi.S(2)), BackColor = Color.Transparent,
                 TextAlign = ContentAlignment.MiddleCenter
-            };
-
-            var nameLbl = new Label
+            });
+            row.Controls.Add(new Label
             {
-                Text      = name,
-                Font      = new Font("Courier New", 8.5f),
-                ForeColor = TEXT_PRI,
-                AutoSize  = true,
-                Location  = new Point(Dpi.S(36), Dpi.S(8)),
-                BackColor = Color.Transparent
-            };
-
+                Text = name, Font = new Font("Courier New", 8.5f),
+                ForeColor = TEXT_PRI, AutoSize = true,
+                Location = new Point(Dpi.S(36), Dpi.S(8)), BackColor = Color.Transparent
+            });
             var statusLbl = new Label
             {
-                Text      = statusText,
-                Font      = new Font("Courier New", 7.5f),
-                ForeColor = statusColor,
-                AutoSize  = true,
-                BackColor = Color.Transparent
+                Text = statusText, Font = new Font("Courier New", 7.5f),
+                ForeColor = statusColor, AutoSize = true, BackColor = Color.Transparent
             };
-            // Right-align the status
             statusLbl.Location = new Point(row.Width - statusLbl.PreferredWidth - Dpi.S(10), Dpi.S(9));
             statusLbl.Anchor   = AnchorStyles.Right | AnchorStyles.Top;
-
-            row.Controls.AddRange(new Control[] { iconLbl, nameLbl, statusLbl });
+            row.Controls.Add(statusLbl);
             return row;
         }
 
-        private static string TrimError(string msg)
-        {
-            if (string.IsNullOrEmpty(msg)) return "Unknown error";
-            return msg.Length > 48 ? msg.Substring(0, 45) + "..." : msg;
-        }
+        private static string TrimError(string msg) =>
+            string.IsNullOrEmpty(msg) ? "Unknown error"
+            : msg.Length > 48 ? msg.Substring(0, 45) + "..." : msg;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -1668,10 +1952,10 @@ namespace CornDownloader
     // ─────────────────────────────────────────────────────────────────────────
     internal class AppSettings
     {
-        public string  DownloadFolder  { get; set; } = "";
-        public bool    PreferWinget    { get; set; } = true;
-        public int     WindowWidth     { get; set; } = 1180;
-        public int     WindowHeight    { get; set; } = 760;
+        public string DownloadFolder { get; set; } = "";
+        public bool   PreferWinget   { get; set; } = true;
+        public int    WindowWidth    { get; set; } = 1180;
+        public int    WindowHeight   { get; set; } = 760;
     }
 
     internal static class SettingsManager
@@ -1685,10 +1969,7 @@ namespace CornDownloader
             try
             {
                 if (File.Exists(_path))
-                {
-                    string json = File.ReadAllText(_path);
-                    return JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
-                }
+                    return JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(_path)) ?? new AppSettings();
             }
             catch { }
             return new AppSettings();
@@ -1705,5 +1986,4 @@ namespace CornDownloader
             catch { }
         }
     }
-
 }

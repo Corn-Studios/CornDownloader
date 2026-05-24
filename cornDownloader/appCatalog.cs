@@ -19,6 +19,7 @@ namespace CornDownloader
         public DownloadMethod PreferredMethod { get; set; }
         public string IconChar { get; set; }           // emoji icon
         public bool IsRecommended { get; set; }        // included in Recommended preset
+        public string PinnedVersion { get; set; }      // null = latest; set by user at runtime
     }
 
     public static class AppCatalog

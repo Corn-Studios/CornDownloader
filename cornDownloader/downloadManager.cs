@@ -193,6 +193,64 @@ namespace CornDownloader
         }
 
         /// <summary>
+        /// Queries 'winget show --id X' and returns the list of available versions,
+        /// most-recent first. Returns an empty list if winget is unavailable or the
+        /// app has no winget ID.
+        /// </summary>
+        public async Task<List<string>> GetAvailableVersionsAsync(AppEntry app)
+        {
+            var versions = new List<string>();
+            if (!WingetAvailable || string.IsNullOrEmpty(app.WingetId)) return versions;
+
+            try
+            {
+                var psi = new ProcessStartInfo
+                {
+                    FileName               = "winget",
+                    Arguments              = $"show --id {app.WingetId} --versions --accept-source-agreements",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError  = true,
+                    UseShellExecute        = false,
+                    CreateNoWindow         = true,
+                    StandardOutputEncoding = System.Text.Encoding.UTF8
+                };
+
+                var tcs    = new TaskCompletionSource<bool>();
+                var proc   = new Process { StartInfo = psi, EnableRaisingEvents = true };
+                var lines  = new List<string>();
+
+                proc.OutputDataReceived += (s, e) => { if (e.Data != null) lines.Add(e.Data); };
+                proc.Exited += (s, e) => tcs.TrySetResult(true);
+                proc.Start();
+                proc.BeginOutputReadLine();
+                proc.BeginErrorReadLine();
+                await Task.WhenAny(tcs.Task, Task.Delay(15_000));
+
+                // winget --versions output looks like:
+                //   Version
+                //   -------
+                //   129.0.0.0
+                //   128.0.0.0
+                // Skip header rows; version lines are all digits and dots.
+                bool pastHeader = false;
+                foreach (var line in lines)
+                {
+                    string t = line.Trim();
+                    if (!pastHeader)
+                    {
+                        if (t.StartsWith("---")) pastHeader = true;
+                        continue;
+                    }
+                    if (t.Length > 0 && (char.IsDigit(t[0]) || t[0] == 'v'))
+                        versions.Add(t);
+                }
+            }
+            catch { }
+
+            return versions;
+        }
+
+        /// <summary>
         /// Upgrades an already-installed app via winget upgrade.
         /// </summary>
         public async Task<InstallResult> UpgradeAsync(AppEntry app, Action<string> onProgress)
@@ -293,7 +351,9 @@ namespace CornDownloader
                 var psi = new ProcessStartInfo
                 {
                     FileName = "winget",
-                    Arguments = $"install --id {app.WingetId} --silent --accept-source-agreements --accept-package-agreements",
+                    Arguments = string.IsNullOrEmpty(app.PinnedVersion)
+                        ? $"install --id {app.WingetId} --silent --accept-source-agreements --accept-package-agreements"
+                        : $"install --id {app.WingetId} --version \"{app.PinnedVersion}\" --silent --accept-source-agreements --accept-package-agreements",
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     UseShellExecute = false,
