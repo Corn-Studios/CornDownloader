@@ -1,0 +1,48 @@
+# Build output
+bin/
+obj/
+out/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Rider / JetBrains
+.idea/
+*.sln.iml
+
+# NuGet
+*.nupkg
+*.snupkg
+packages/
+.nuget/
+
+# Publish / release artifacts
+publish/
+*.msix
+*.appinstaller
+*.appx
+
+# App data / settings (generated at runtime)
+settings.json
+
+# Logs
+*.log
+
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Downloaded installers (direct-URL temp files)
+Downloads/
+*.exe.tmp
+
+# Compiled assembly output
+*.dll
+*.pdb
+*.exe
+!bin/Release/**/*.exe
