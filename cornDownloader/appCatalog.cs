@@ -2,12 +2,6 @@ using System.Collections.Generic;
 
 namespace CornDownloader
 {
-    public enum DownloadMethod
-    {
-        Winget,
-        DirectUrl
-    }
-
     public class AppEntry
     {
         public string Name { get; set; }
@@ -16,15 +10,19 @@ namespace CornDownloader
         public string WingetId { get; set; }          // null if not available
         public string DirectUrl { get; set; }          // null if not available
         public string FileName { get; set; }           // for direct downloads
-        public DownloadMethod PreferredMethod { get; set; }
         public string IconChar { get; set; }           // emoji icon
         public bool IsRecommended { get; set; }        // included in Recommended preset
         public string PinnedVersion { get; set; }      // null = latest; set by user at runtime
+        /// <summary>
+        /// When non-null, this entry is bundled inside another app (e.g. FancyZones inside PowerToys).
+        /// The value is the WingetId of the parent app. This entry cannot be installed standalone.
+        /// </summary>
+        public string IsBundledWith { get; set; }
     }
 
     public static class AppCatalog
     {
-        public static List<AppEntry> All => new List<AppEntry>
+        public static readonly List<AppEntry> All = new List<AppEntry>
         {
             // ── BROWSERS ──────────────────────────────────────────────────────
 
@@ -34,7 +32,6 @@ namespace CornDownloader
                 WingetId = "Mozilla.Firefox",
                 DirectUrl = "https://download.mozilla.org/?product=firefox-latest&os=win64&lang=en-US",
                 FileName = "FirefoxSetup.exe",
-                PreferredMethod = DownloadMethod.Winget,
                 IsRecommended = true
             },
             new AppEntry {
@@ -43,7 +40,6 @@ namespace CornDownloader
                 WingetId = "Hibbiki.Chromium",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
 
             new AppEntry {
@@ -52,7 +48,6 @@ namespace CornDownloader
                 WingetId = "Brave.Brave",
                 DirectUrl = "https://laptop-updates.brave.com/latest/winx64",
                 FileName = "BraveSetup.exe",
-                PreferredMethod = DownloadMethod.Winget
             },
 
 
@@ -64,7 +59,6 @@ namespace CornDownloader
                 WingetId = "Microsoft.VisualStudioCode",
                 DirectUrl = "https://code.visualstudio.com/sha/download?build=stable&os=win32-x64-user",
                 FileName = "VSCodeSetup.exe",
-                PreferredMethod = DownloadMethod.Winget,
                 IsRecommended = true
             },
             new AppEntry {
@@ -73,7 +67,6 @@ namespace CornDownloader
                 WingetId = "Git.Git",
                 DirectUrl = "https://github.com/git-for-windows/git/releases/latest/download/Git-2.44.0-64-bit.exe",
                 FileName = "GitSetup.exe",
-                PreferredMethod = DownloadMethod.Winget,
                 IsRecommended = true
             },
             new AppEntry {
@@ -82,7 +75,6 @@ namespace CornDownloader
                 WingetId = "OpenJS.NodeJS.LTS",
                 DirectUrl = "https://nodejs.org/dist/latest-v20.x/node-v20.11.1-x64.msi",
                 FileName = "NodeJS.msi",
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "Python 3", Category = "Dev Tools", IconChar = "🐍",
@@ -90,7 +82,6 @@ namespace CornDownloader
                 WingetId = "Python.Python.3.12",
                 DirectUrl = "https://www.python.org/ftp/python/3.12.2/python-3.12.2-amd64.exe",
                 FileName = "PythonSetup.exe",
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "Windows Terminal", Category = "Dev Tools", IconChar = "⬛",
@@ -98,7 +89,6 @@ namespace CornDownloader
                 WingetId = "Microsoft.WindowsTerminal",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "GitHub Desktop", Category = "Dev Tools", IconChar = "🐙",
@@ -106,7 +96,6 @@ namespace CornDownloader
                 WingetId = "GitHub.GitHubDesktop",
                 DirectUrl = "https://central.github.com/deployments/desktop/desktop/latest/win32",
                 FileName = "GitHubDesktopSetup.exe",
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "Postman", Category = "Dev Tools", IconChar = "📮",
@@ -114,7 +103,6 @@ namespace CornDownloader
                 WingetId = "Postman.Postman",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "Docker Desktop", Category = "Dev Tools", IconChar = "🐳",
@@ -122,7 +110,6 @@ namespace CornDownloader
                 WingetId = "Docker.DockerDesktop",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
 
             new AppEntry {
@@ -131,7 +118,6 @@ namespace CornDownloader
                 WingetId = "Microsoft.PowerShell",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
 
             // ── MEDIA & ENTERTAINMENT ─────────────────────────────────────────
@@ -141,7 +127,6 @@ namespace CornDownloader
                 WingetId = "VideoLAN.VLC",
                 DirectUrl = "https://get.videolan.org/vlc/last/win64/",
                 FileName = "VLCSetup.exe",
-                PreferredMethod = DownloadMethod.Winget,
                 IsRecommended = true
             },
             new AppEntry {
@@ -150,7 +135,6 @@ namespace CornDownloader
                 WingetId = "Spotify.Spotify",
                 DirectUrl = "https://download.scdn.co/SpotifySetup.exe",
                 FileName = "SpotifySetup.exe",
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "OBS Studio", Category = "Media & Entertainment", IconChar = "📹",
@@ -158,7 +142,6 @@ namespace CornDownloader
                 WingetId = "OBSProject.OBSStudio",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "Audacity", Category = "Media & Entertainment", IconChar = "🎙️",
@@ -166,7 +149,6 @@ namespace CornDownloader
                 WingetId = "Audacity.Audacity",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "HandBrake", Category = "Media & Entertainment", IconChar = "📼",
@@ -174,7 +156,6 @@ namespace CornDownloader
                 WingetId = "HandBrake.HandBrake",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "MPC-HC", Category = "Media & Entertainment", IconChar = "▶️",
@@ -182,7 +163,6 @@ namespace CornDownloader
                 WingetId = "clsid2.mpc-hc",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "K-Lite Codec Pack", Category = "Media & Entertainment", IconChar = "🎞️",
@@ -190,7 +170,6 @@ namespace CornDownloader
                 WingetId = null,
                 DirectUrl = "https://files2.codecguide.com/K-Lite_Codec_Pack_1865_Basic.exe",
                 FileName = "KLiteCodecPack.exe",
-                PreferredMethod = DownloadMethod.DirectUrl
             },
             new AppEntry {
                 Name = "iTunes", Category = "Media & Entertainment", IconChar = "🎶",
@@ -198,7 +177,6 @@ namespace CornDownloader
                 WingetId = "Apple.iTunes",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
 
             // ── PRODUCTIVITY ──────────────────────────────────────────────────
@@ -208,7 +186,6 @@ namespace CornDownloader
                 WingetId = "Notion.Notion",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "Obsidian", Category = "Productivity", IconChar = "🔮",
@@ -216,7 +193,6 @@ namespace CornDownloader
                 WingetId = "Obsidian.Obsidian",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "Slack", Category = "Productivity", IconChar = "💬",
@@ -224,7 +200,6 @@ namespace CornDownloader
                 WingetId = "SlackTechnologies.Slack",
                 DirectUrl = "https://slack.com/downloads/windows",
                 FileName = "SlackSetup.exe",
-                PreferredMethod = DownloadMethod.Winget
             },
 
             new AppEntry {
@@ -233,7 +208,6 @@ namespace CornDownloader
                 WingetId = "Zoom.Zoom",
                 DirectUrl = "https://zoom.us/client/latest/ZoomInstallerFull.exe",
                 FileName = "ZoomSetup.exe",
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "LibreOffice", Category = "Productivity", IconChar = "📄",
@@ -241,7 +215,6 @@ namespace CornDownloader
                 WingetId = "TheDocumentFoundation.LibreOffice",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "Notepad++", Category = "Productivity", IconChar = "📝",
@@ -249,7 +222,6 @@ namespace CornDownloader
                 WingetId = "Notepad++.Notepad++",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget,
                 IsRecommended = true
             },
             new AppEntry {
@@ -258,7 +230,6 @@ namespace CornDownloader
                 WingetId = "ShareX.ShareX",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
 
             // ── GAMING ────────────────────────────────────────────────────────
@@ -268,7 +239,6 @@ namespace CornDownloader
                 WingetId = "Valve.Steam",
                 DirectUrl = "https://cdn.akamai.steamstatic.com/client/installer/SteamSetup.exe",
                 FileName = "SteamSetup.exe",
-                PreferredMethod = DownloadMethod.Winget,
                 IsRecommended = true
             },
             new AppEntry {
@@ -277,7 +247,6 @@ namespace CornDownloader
                 WingetId = "EpicGames.EpicGamesLauncher",
                 DirectUrl = "https://launcher-public-service-prod06.ol.epicgames.com/launcher/api/installer/download/EpicGamesLauncherInstaller.msi",
                 FileName = "EpicGamesSetup.msi",
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "GOG Galaxy", Category = "Gaming", IconChar = "⭐",
@@ -285,7 +254,6 @@ namespace CornDownloader
                 WingetId = "GOG.Galaxy",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "EA App", Category = "Gaming", IconChar = "🕹️",
@@ -293,7 +261,6 @@ namespace CornDownloader
                 WingetId = "ElectronicArts.EADesktop",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "Ubisoft Connect", Category = "Gaming", IconChar = "🔵",
@@ -301,7 +268,6 @@ namespace CornDownloader
                 WingetId = "Ubisoft.Connect",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "Discord", Category = "Gaming", IconChar = "🎧",
@@ -309,7 +275,6 @@ namespace CornDownloader
                 WingetId = "Discord.Discord",
                 DirectUrl = "https://discord.com/api/downloads/distributions/app/installers/latest?channel=stable&platform=win&arch=x64",
                 FileName = "DiscordSetup.exe",
-                PreferredMethod = DownloadMethod.Winget,
                 IsRecommended = true
             },
             new AppEntry {
@@ -318,7 +283,6 @@ namespace CornDownloader
                 WingetId = "Guru3D.Afterburner",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "Playnite", Category = "Gaming", IconChar = "📚",
@@ -326,7 +290,6 @@ namespace CornDownloader
                 WingetId = "Playnite.Playnite",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
 
             // ── UTILITIES & SYSTEM TOOLS ──────────────────────────────────────
@@ -336,7 +299,6 @@ namespace CornDownloader
                 WingetId = "7zip.7zip",
                 DirectUrl = "https://www.7-zip.org/a/7z2401-x64.exe",
                 FileName = "7ZipSetup.exe",
-                PreferredMethod = DownloadMethod.Winget,
                 IsRecommended = true
             },
             new AppEntry {
@@ -345,7 +307,6 @@ namespace CornDownloader
                 WingetId = "voidtools.Everything",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "CPU-Z", Category = "Utilities & System Tools", IconChar = "🖥️",
@@ -353,7 +314,6 @@ namespace CornDownloader
                 WingetId = "CPUID.CPU-Z",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "HWiNFO", Category = "Utilities & System Tools", IconChar = "📊",
@@ -361,7 +321,6 @@ namespace CornDownloader
                 WingetId = "REALiX.HWiNFO",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "CrystalDiskInfo", Category = "Utilities & System Tools", IconChar = "💾",
@@ -369,7 +328,6 @@ namespace CornDownloader
                 WingetId = "CrystalDewWorld.CrystalDiskInfo",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
 
 
@@ -379,7 +337,6 @@ namespace CornDownloader
                 WingetId = "WinDirStat.WinDirStat",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "Autoruns", Category = "Utilities & System Tools", IconChar = "⚙️",
@@ -387,7 +344,6 @@ namespace CornDownloader
                 WingetId = "Microsoft.Sysinternals.Autoruns",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "Malwarebytes", Category = "Utilities & System Tools", IconChar = "🛡️",
@@ -395,7 +351,6 @@ namespace CornDownloader
                 WingetId = "Malwarebytes.Malwarebytes",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "PowerToys", Category = "Utilities & System Tools", IconChar = "🔧",
@@ -403,7 +358,6 @@ namespace CornDownloader
                 WingetId = "Microsoft.PowerToys",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget,
                 IsRecommended = true
             },
 
@@ -414,7 +368,6 @@ namespace CornDownloader
                 WingetId = "Rainmeter.Rainmeter",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "Lively Wallpaper", Category = "Customization", IconChar = "🖼️",
@@ -422,7 +375,6 @@ namespace CornDownloader
                 WingetId = "rocksdanister.LivelyWallpaper",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "TranslucentTB", Category = "Customization", IconChar = "🔲",
@@ -430,7 +382,6 @@ namespace CornDownloader
                 WingetId = "CharlesMilette.TranslucentTB",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "StartAllBack", Category = "Customization", IconChar = "🪟",
@@ -438,7 +389,6 @@ namespace CornDownloader
                 WingetId = "StartIsBack.StartAllBack",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "EarTrumpet", Category = "Customization", IconChar = "🔊",
@@ -446,7 +396,6 @@ namespace CornDownloader
                 WingetId = "File-New-Project.EarTrumpet",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "Windhawk", Category = "Customization", IconChar = "🦅",
@@ -454,7 +403,6 @@ namespace CornDownloader
                 WingetId = "RamenSoftware.Windhawk",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "YASB (Yet Another Status Bar)", Category = "Customization", IconChar = "📊",
@@ -462,7 +410,6 @@ namespace CornDownloader
                 WingetId = "AmN.yasb",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "ModernFlyouts", Category = "Customization", IconChar = "🎨",
@@ -470,7 +417,6 @@ namespace CornDownloader
                 WingetId = "ModernFlyouts.ModernFlyouts",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
 
             // ── BROWSERS (additions) ──────────────────────────────────────────
@@ -480,7 +426,6 @@ namespace CornDownloader
                 WingetId = "Waterfox.Waterfox",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
 
             // ── DEV TOOLS (additions) ─────────────────────────────────────────
@@ -490,7 +435,6 @@ namespace CornDownloader
                 WingetId = "PyPy.PyPy",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "JetBrains Toolbox", Category = "Dev Tools", IconChar = "🧰",
@@ -498,7 +442,6 @@ namespace CornDownloader
                 WingetId = "JetBrains.Toolbox",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "Wireshark", Category = "Dev Tools", IconChar = "🦈",
@@ -506,7 +449,6 @@ namespace CornDownloader
                 WingetId = "WiresharkFoundation.Wireshark",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "BlockBench", Category = "Dev Tools", IconChar = "🟫",
@@ -514,7 +456,6 @@ namespace CornDownloader
                 WingetId = "JannisX11.Blockbench",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
 
             // ── GAMING (additions) ────────────────────────────────────────────
@@ -524,7 +465,6 @@ namespace CornDownloader
                 WingetId = "Overwolf.Overwolf",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "Medal", Category = "Gaming", IconChar = "🥇",
@@ -532,7 +472,6 @@ namespace CornDownloader
                 WingetId = "Medal.Medal",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "Valorant Tracker", Category = "Gaming", IconChar = "🎯",
@@ -540,7 +479,6 @@ namespace CornDownloader
                 WingetId = "TrackerNetwork.ValorantTracker",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "Prism Launcher", Category = "Gaming", IconChar = "🟩",
@@ -548,7 +486,6 @@ namespace CornDownloader
                 WingetId = "PrismLauncher.PrismLauncher",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "Minecraft Launcher", Category = "Gaming", IconChar = "⛏️",
@@ -556,7 +493,6 @@ namespace CornDownloader
                 WingetId = "Mojang.MinecraftLauncher",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
 
             // ── UTILITIES & SYSTEM TOOLS (additions) ──────────────────────────
@@ -566,7 +502,6 @@ namespace CornDownloader
                 WingetId = "TechPowerUp.GPU-Z",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "Revo Uninstaller", Category = "Utilities & System Tools", IconChar = "🗑️",
@@ -574,7 +509,6 @@ namespace CornDownloader
                 WingetId = "RevoUninstaller.RevoUninstaller",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "CDBurnerXP", Category = "Utilities & System Tools", IconChar = "💿",
@@ -582,7 +516,6 @@ namespace CornDownloader
                 WingetId = "CDBurnerXP.CDBurnerXP",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "OpenVPN", Category = "Utilities & System Tools", IconChar = "🔒",
@@ -590,7 +523,6 @@ namespace CornDownloader
                 WingetId = "OpenVPNTechnologies.OpenVPN",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "ProtonVPN", Category = "Utilities & System Tools", IconChar = "🛡️",
@@ -598,7 +530,6 @@ namespace CornDownloader
                 WingetId = "ProtonTechnologies.ProtonVPN",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "WireGuard", Category = "Utilities & System Tools", IconChar = "🔐",
@@ -606,7 +537,6 @@ namespace CornDownloader
                 WingetId = "WireGuard.WireGuard",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "Microsoft PC Manager", Category = "Utilities & System Tools", IconChar = "🖥️",
@@ -614,7 +544,6 @@ namespace CornDownloader
                 WingetId = "Microsoft.PCManager",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
 
             // ── PRODUCTIVITY (additions) ──────────────────────────────────────
@@ -624,7 +553,6 @@ namespace CornDownloader
                 WingetId = "FxSound.FxSound",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "Claude Desktop", Category = "Productivity", IconChar = "🤖",
@@ -632,7 +560,6 @@ namespace CornDownloader
                 WingetId = "Anthropic.Claude",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "Google Chrome", Category = "Browsers", IconChar = "🌐",
@@ -640,7 +567,6 @@ namespace CornDownloader
                 WingetId = "Google.Chrome",
                 DirectUrl = "https://dl.google.com/chrome/install/ChromeStandaloneSetup64.exe",
                 FileName = "ChromeSetup.exe",
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "Opera GX", Category = "Browsers", IconChar = "🎮",
@@ -648,7 +574,6 @@ namespace CornDownloader
                 WingetId = "Opera.OperaGX",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "Ferdium", Category = "Productivity", IconChar = "💬",
@@ -656,7 +581,6 @@ namespace CornDownloader
                 WingetId = "Ferdium.Ferdium",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "Parsec", Category = "Gaming", IconChar = "🖥️",
@@ -664,7 +588,6 @@ namespace CornDownloader
                 WingetId = "Parsec.Parsec",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
 
             // ── BROWSERS (new) ────────────────────────────────────────────────
@@ -674,7 +597,6 @@ namespace CornDownloader
                 WingetId = "TorProject.TorBrowser",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
 
             // ── DEV TOOLS (new) ───────────────────────────────────────────────
@@ -684,7 +606,6 @@ namespace CornDownloader
                 WingetId = "Neovim.Neovim",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "WSL (Windows Subsystem for Linux)", Category = "Dev Tools", IconChar = "🐧",
@@ -692,7 +613,6 @@ namespace CornDownloader
                 WingetId = "Microsoft.WSL",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "Insomnia", Category = "Dev Tools", IconChar = "😴",
@@ -700,7 +620,6 @@ namespace CornDownloader
                 WingetId = "Insomnia.Insomnia",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "FileZilla", Category = "Dev Tools", IconChar = "📁",
@@ -708,7 +627,6 @@ namespace CornDownloader
                 WingetId = "TimKosse.FileZilla.Client",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "HeidiSQL", Category = "Dev Tools", IconChar = "🗄️",
@@ -716,7 +634,6 @@ namespace CornDownloader
                 WingetId = "HeidiSQL.HeidiSQL",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
 
             // ── MEDIA & ENTERTAINMENT (new) ───────────────────────────────────
@@ -726,7 +643,6 @@ namespace CornDownloader
                 WingetId = "Plex.Plex",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "Stremio", Category = "Media & Entertainment", IconChar = "🎞️",
@@ -734,7 +650,6 @@ namespace CornDownloader
                 WingetId = "Stremio.Stremio",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "foobar2000", Category = "Media & Entertainment", IconChar = "🎵",
@@ -742,7 +657,6 @@ namespace CornDownloader
                 WingetId = "PeterPawlowski.foobar2000",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "ImageGlass", Category = "Media & Entertainment", IconChar = "🖼️",
@@ -750,7 +664,6 @@ namespace CornDownloader
                 WingetId = "DuongDieuPhap.ImageGlass",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
 
             // ── PRODUCTIVITY (new) ────────────────────────────────────────────
@@ -760,7 +673,6 @@ namespace CornDownloader
                 WingetId = "Bitwarden.Bitwarden",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "Thunderbird", Category = "Productivity", IconChar = "⚡",
@@ -768,7 +680,6 @@ namespace CornDownloader
                 WingetId = "Mozilla.Thunderbird",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "Stretchly", Category = "Productivity", IconChar = "🧘",
@@ -776,7 +687,6 @@ namespace CornDownloader
                 WingetId = "Stretchly.Stretchly",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "Greenshot", Category = "Productivity", IconChar = "📸",
@@ -784,7 +694,6 @@ namespace CornDownloader
                 WingetId = "Greenshot.Greenshot",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
 
             // ── GAMING (new) ──────────────────────────────────────────────────
@@ -794,7 +703,6 @@ namespace CornDownloader
                 WingetId = "LizardByte.Sunshine",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "Xbox App", Category = "Gaming", IconChar = "🎮",
@@ -802,7 +710,6 @@ namespace CornDownloader
                 WingetId = "Microsoft.GamingApp",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "Heroic Games Launcher", Category = "Gaming", IconChar = "🦸",
@@ -810,7 +717,6 @@ namespace CornDownloader
                 WingetId = "HeroicGamesLauncher.HeroicGamesLauncher",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
 
             // ── UTILITIES & SYSTEM TOOLS (new) ────────────────────────────────
@@ -820,7 +726,6 @@ namespace CornDownloader
                 WingetId = "TGRMN.BulkRenameUtility",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "Process Hacker", Category = "Utilities & System Tools", IconChar = "⚙️",
@@ -828,7 +733,6 @@ namespace CornDownloader
                 WingetId = "ProcessHacker.ProcessHacker",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "Ventoy", Category = "Utilities & System Tools", IconChar = "💽",
@@ -836,7 +740,6 @@ namespace CornDownloader
                 WingetId = "Ventoy.Ventoy",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "Rufus", Category = "Utilities & System Tools", IconChar = "🔥",
@@ -844,7 +747,6 @@ namespace CornDownloader
                 WingetId = "Rufus.Rufus",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "EqualizerAPO", Category = "Utilities & System Tools", IconChar = "🎚️",
@@ -852,7 +754,6 @@ namespace CornDownloader
                 WingetId = "EqualizerAPO.EqualizerAPO",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "NanaZip", Category = "Utilities & System Tools", IconChar = "🗜️",
@@ -860,7 +761,6 @@ namespace CornDownloader
                 WingetId = "M2Team.NanaZip",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
 
             // ── CUSTOMIZATION (new) ───────────────────────────────────────────
@@ -870,7 +770,6 @@ namespace CornDownloader
                 WingetId = "LGUG2Z.komorebi",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "GlazeWM", Category = "Customization", IconChar = "✨",
@@ -878,7 +777,6 @@ namespace CornDownloader
                 WingetId = "glzr-io.glazewm",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
 
             // ── BROWSERS (batch 2) ────────────────────────────────────────────
@@ -888,7 +786,6 @@ namespace CornDownloader
                 WingetId = "LibreWolf.LibreWolf",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "Min Browser", Category = "Browsers", IconChar = "◻️",
@@ -896,7 +793,6 @@ namespace CornDownloader
                 WingetId = "minbrowser.min",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "Zen Browser", Category = "Browsers", IconChar = "🧘",
@@ -904,7 +800,6 @@ namespace CornDownloader
                 WingetId = "Zen-Team.Zen-Browser",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
 
             // ── DEV TOOLS (batch 2) ───────────────────────────────────────────
@@ -914,7 +809,6 @@ namespace CornDownloader
                 WingetId = "Microsoft.VisualStudio.2022.Community",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "Rust (rustup)", Category = "Dev Tools", IconChar = "🦀",
@@ -922,7 +816,6 @@ namespace CornDownloader
                 WingetId = "Rustlang.Rustup",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "Go (Golang)", Category = "Dev Tools", IconChar = "🐹",
@@ -930,7 +823,6 @@ namespace CornDownloader
                 WingetId = "GoLang.Go",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "Android Studio", Category = "Dev Tools", IconChar = "🤖",
@@ -938,7 +830,6 @@ namespace CornDownloader
                 WingetId = "Google.AndroidStudio",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
 
             // ── MEDIA & ENTERTAINMENT (batch 2) ───────────────────────────────
@@ -948,7 +839,6 @@ namespace CornDownloader
                 WingetId = "FreeTubeApp.FreeTube",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "GIMP", Category = "Media & Entertainment", IconChar = "🖌️",
@@ -956,7 +846,6 @@ namespace CornDownloader
                 WingetId = "GIMP.GIMP",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "DaVinci Resolve", Category = "Media & Entertainment", IconChar = "🎬",
@@ -964,7 +853,6 @@ namespace CornDownloader
                 WingetId = "Blackmagic.DaVinciResolve",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "Streamlink Twitch GUI", Category = "Media & Entertainment", IconChar = "🟣",
@@ -972,7 +860,6 @@ namespace CornDownloader
                 WingetId = "streamlink.streamlink-twitch-gui",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "Blender", Category = "Media & Entertainment", IconChar = "🧊",
@@ -980,7 +867,6 @@ namespace CornDownloader
                 WingetId = "BlenderFoundation.Blender",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
 
             // ── PRODUCTIVITY (batch 2) ────────────────────────────────────────
@@ -990,7 +876,6 @@ namespace CornDownloader
                 WingetId = "WhatsApp.WhatsApp",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
 
             // ── GAMING (batch 2) ──────────────────────────────────────────────
@@ -1000,7 +885,6 @@ namespace CornDownloader
                 WingetId = "itch.itch",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "Battle.net", Category = "Gaming", IconChar = "⚔️",
@@ -1008,7 +892,6 @@ namespace CornDownloader
                 WingetId = "Blizzard.BattleNet",
                 DirectUrl = "https://www.battle.net/download/getInstallerForGame?os=win&locale=enUS&version=LIVE&gameProgram=BATTLENET_APP",
                 FileName = "BattleNetSetup.exe",
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "Rockstar Games Launcher", Category = "Gaming", IconChar = "⭐",
@@ -1016,7 +899,6 @@ namespace CornDownloader
                 WingetId = "Rockstar.RockstarGamesLauncher",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "Vortex Mod Manager", Category = "Gaming", IconChar = "🌀",
@@ -1024,7 +906,6 @@ namespace CornDownloader
                 WingetId = "NexusMods.Vortex",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "Nexus Mod Manager", Category = "Gaming", IconChar = "📦",
@@ -1032,7 +913,6 @@ namespace CornDownloader
                 WingetId = null,
                 DirectUrl = "https://github.com/Nexus-Mods/Nexus-Mod-Manager/releases/latest/download/NexusModManager.exe",
                 FileName = "NexusModManager.exe",
-                PreferredMethod = DownloadMethod.DirectUrl
             },
             new AppEntry {
                 Name = "Mod Organizer 2", Category = "Gaming", IconChar = "🗂️",
@@ -1040,7 +920,6 @@ namespace CornDownloader
                 WingetId = "ModOrganizer2.ModOrganizer2",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "CapFrameX", Category = "Gaming", IconChar = "📈",
@@ -1048,7 +927,6 @@ namespace CornDownloader
                 WingetId = "CXWorld.CapFrameX",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
 
             // ── UTILITIES & SYSTEM TOOLS (batch 2) ────────────────────────────
@@ -1058,7 +936,6 @@ namespace CornDownloader
                 WingetId = "CPUID.HWMonitor",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "O&O ShutUp10++", Category = "Utilities & System Tools", IconChar = "🔕",
@@ -1066,7 +943,6 @@ namespace CornDownloader
                 WingetId = "OO-Software.ShutUp10",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
             new AppEntry {
                 Name = "BleachBit", Category = "Utilities & System Tools", IconChar = "🧹",
@@ -1074,17 +950,16 @@ namespace CornDownloader
                 WingetId = "BleachBit.BleachBit",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
 
             // ── CUSTOMIZATION (batch 2) ───────────────────────────────────────
             new AppEntry {
                 Name = "FancyZones (PowerToys)", Category = "Customization", IconChar = "🪟",
                 Description = "Advanced window snapping layouts — part of Microsoft PowerToys",
-                WingetId = "Microsoft.PowerToys",
+                WingetId = null,
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
+                IsBundledWith = "Microsoft.PowerToys"
             },
             new AppEntry {
                 Name = "ExplorerPatcher", Category = "Customization", IconChar = "🛠️",
@@ -1092,7 +967,6 @@ namespace CornDownloader
                 WingetId = "valinet.ExplorerPatcher",
                 DirectUrl = null,
                 FileName = null,
-                PreferredMethod = DownloadMethod.Winget
             },
         };
     }

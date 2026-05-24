@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace CornDownloader
@@ -117,14 +118,24 @@ namespace CornDownloader
 
                 // The JSON structure is:
                 // { "Sources": [ { "Packages": [ { "PackageIdentifier": "Brave.Brave" }, ... ] } ] }
-                // Simple string matching on "PackageIdentifier" values — no JSON library needed.
-                foreach (var app in AppCatalog.All)
+                // Parse properly to avoid false positives (e.g. "Git.Git" matching "Git.GitLFS").
+                try
                 {
-                    if (string.IsNullOrEmpty(app.WingetId)) continue;
-                    // Look for: "PackageIdentifier": "Brave.Brave"
-                    if (json.IndexOf(app.WingetId, StringComparison.OrdinalIgnoreCase) >= 0)
-                        installed.Add(app.WingetId);
+                    using var doc = JsonDocument.Parse(json);
+                    if (doc.RootElement.TryGetProperty("Sources", out var sources))
+                    {
+                        foreach (var source in sources.EnumerateArray())
+                        {
+                            if (!source.TryGetProperty("Packages", out var packages)) continue;
+                            foreach (var pkg in packages.EnumerateArray())
+                            {
+                                if (pkg.TryGetProperty("PackageIdentifier", out var idProp))
+                                    installed.Add(idProp.GetString() ?? "");
+                            }
+                        }
+                    }
                 }
+                catch { /* malformed JSON — fall back to empty set */ }
             }
             catch { }
             finally
@@ -180,10 +191,17 @@ namespace CornDownloader
 
                 string cleanOutput = clean.ToString();
 
+                // Build a set of all whitespace-delimited tokens in the output so we
+                // can do exact-match lookups rather than substring IndexOf, which would
+                // cause "Git.Git" to match lines that contain "Git.GitLFS", etc.
+                var tokens = new HashSet<string>(
+                    cleanOutput.Split(new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries),
+                    StringComparer.OrdinalIgnoreCase);
+
                 foreach (var app in AppCatalog.All)
                 {
                     if (string.IsNullOrEmpty(app.WingetId)) continue;
-                    if (cleanOutput.IndexOf(app.WingetId, StringComparison.OrdinalIgnoreCase) >= 0)
+                    if (tokens.Contains(app.WingetId))
                         updatable.Add(app.WingetId);
                 }
             }
@@ -316,6 +334,14 @@ namespace CornDownloader
         {
             var result = new InstallResult { App = app, Status = InstallStatus.Pending };
 
+            // Bundled apps (e.g. FancyZones inside PowerToys) can't be installed standalone.
+            if (!string.IsNullOrEmpty(app.IsBundledWith))
+            {
+                result.Status  = InstallStatus.Skipped;
+                result.Message = $"{app.Name} is included with {app.IsBundledWith} — install that instead.";
+                return result;
+            }
+
             bool useWinget = preferWinget && WingetAvailable && !string.IsNullOrEmpty(app.WingetId);
             bool hasDirect = !string.IsNullOrEmpty(app.DirectUrl) && !string.IsNullOrEmpty(app.FileName);
 
@@ -406,6 +432,13 @@ namespace CornDownloader
 
         private static readonly HttpClient _httpClient = new HttpClient();
 
+        static DownloadManager()
+        {
+            // Set the user-agent once. Calling ParseAdd on every request throws if
+            // the header already exists from a previous download.
+            _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("CornDownloader/1.1");
+        }
+
         private async Task<InstallResult> InstallViaDirectUrl(
             AppEntry app,
             string downloadFolder,
@@ -419,8 +452,6 @@ namespace CornDownloader
 
             try
             {
-                _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("CornDownloader/1.0");
-
                 using (var response = await _httpClient.GetAsync(app.DirectUrl, HttpCompletionOption.ResponseHeadersRead))
                 {
                     response.EnsureSuccessStatusCode();
@@ -479,14 +510,16 @@ namespace CornDownloader
                     result.Status  = InstallStatus.Failed;
                     result.Message = $"Installer exited with code {exitCode}.";
                 }
-
-                // Clean up — delete the installer file after a successful run
-                try { if (File.Exists(destPath)) File.Delete(destPath); } catch { }
             }
             catch (Exception ex)
             {
                 result.Status = InstallStatus.Failed;
                 result.Message = ex.Message;
+            }
+            finally
+            {
+                // Always clean up the downloaded installer file regardless of outcome.
+                try { if (File.Exists(destPath)) File.Delete(destPath); } catch { }
             }
 
             return result;

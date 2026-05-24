@@ -240,6 +240,11 @@ namespace CornDownloader
             _ = RunStartupAsync();
 
             this.FormClosing += (s, e) => SaveSettings();
+
+            // Also save on meaningful state changes so a crash doesn't lose settings.
+            this.ResizeEnd          += (s, e) => SaveSettings();
+            if (_folderBox        != null) _folderBox.Leave        += (s, e) => SaveSettings();
+            if (_preferWingetChk  != null) _preferWingetChk.CheckedChanged += (s, e) => SaveSettings();
         }
 
         private async Task RunStartupAsync()
@@ -461,14 +466,18 @@ namespace CornDownloader
                         string.Equals(a.Name, packed.Name, StringComparison.OrdinalIgnoreCase));
                     if (entry == null) continue;
 
-                    // Apply pinned version from pack
-                    entry.PinnedVersion = packed.PinnedVersion;
-
                     if (_tiles.TryGetValue(entry, out var tile))
                     {
                         tile.IsChecked = true;
-                        if (!string.IsNullOrEmpty(entry.PinnedVersion))
-                            tile.SetPinnedVersion(entry.PinnedVersion);
+                        // Write PinnedVersion onto the catalog entry (it's a runtime-only field —
+                        // AppCatalog.All is now a static readonly list so the instances persist for
+                        // the session, but PinnedVersion resets to null on next launch). This is
+                        // intentional: the pinned version is session-scoped, not catalog-baked.
+                        if (!string.IsNullOrEmpty(packed.PinnedVersion))
+                        {
+                            entry.PinnedVersion = packed.PinnedVersion;
+                            tile.SetPinnedVersion(packed.PinnedVersion);
+                        }
                         matched++;
                     }
                 }
@@ -855,19 +864,16 @@ namespace CornDownloader
 
         private void RefreshSidebarButtons()
         {
-            foreach (Control c in _sidebar.Controls)
+            foreach (var kv in _sidebarBtns)
             {
-                if (c is Button btn && btn.Text.Contains("  "))
-                {
-                    string raw        = btn.Text.Trim();
-                    string matchedCat = _categories.FirstOrDefault(cat =>
-                        raw.EndsWith(cat.ToUpper(), StringComparison.OrdinalIgnoreCase)) ?? "";
-                    bool active = matchedCat == _activeCategory;
-                    btn.BackColor = active ? Color.FromArgb(40, 245, 200, 66) : Color.Transparent;
-                    btn.ForeColor = active ? ACCENT : TEXT_SEC;
-                    btn.Font      = new Font("Courier New", 7f, active ? FontStyle.Bold : FontStyle.Regular);
-                    btn.Invalidate();
-                }
+                string cat    = kv.Key;
+                var    btn    = kv.Value;
+                bool   active = cat == _activeCategory;
+
+                btn.BackColor = active ? Color.FromArgb(40, 245, 200, 66) : Color.Transparent;
+                btn.ForeColor = active ? ACCENT : TEXT_SEC;
+                btn.Font      = new Font("Courier New", 7f, active ? FontStyle.Bold : FontStyle.Regular);
+                btn.Invalidate();
             }
         }
 
@@ -1043,7 +1049,12 @@ namespace CornDownloader
             };
             _clearBtn.FlatAppearance.BorderColor = BORDER2;
             _clearBtn.FlatAppearance.BorderSize  = 1;
-            _clearBtn.Click += (s, e) => SetAllInView(false);
+            // Clear ALL selections across all categories, not just the currently visible grid.
+            _clearBtn.Click += (s, e) =>
+            {
+                foreach (var tile in _tiles.Values) tile.IsChecked = false;
+                UpdateSelectionCount();
+            };
 
             _installBtn = new Button
             {
@@ -1310,7 +1321,8 @@ namespace CornDownloader
             get => _checked;
             set
             {
-                if (value && _isInstalled) return;
+                // Can't select installed apps or apps that are bundled inside another package.
+                if (value && (_isInstalled || !string.IsNullOrEmpty(_app.IsBundledWith))) return;
                 _checked  = value;
                 BackColor = value ? _checkedBg : _normalBg;
                 Invalidate();
@@ -1398,10 +1410,23 @@ namespace CornDownloader
             };
 
             // ── Method badge ─────────────────────────────────────────────────
-            string method  = app.WingetId != null ? "winget" : "direct";
-            Color  badgeFg = app.WingetId != null
-                ? Color.FromArgb(245, 200, 66)
-                : Color.FromArgb(160, 157, 192);
+            string method;
+            Color  badgeFg;
+            if (!string.IsNullOrEmpty(app.IsBundledWith))
+            {
+                method  = "bundled";
+                badgeFg = Color.FromArgb(101, 97, 160);   // muted — not installable standalone
+            }
+            else if (app.WingetId != null)
+            {
+                method  = "winget";
+                badgeFg = Color.FromArgb(245, 200, 66);
+            }
+            else
+            {
+                method  = "direct";
+                badgeFg = Color.FromArgb(160, 157, 192);
+            }
 
             var methodBadge = new Label
             {
@@ -1562,7 +1587,7 @@ namespace CornDownloader
             // ── Click-to-toggle ───────────────────────────────────────────────
             void Toggle(object s, EventArgs e)
             {
-                if (_isInstalled) return;
+                if (_isInstalled || !string.IsNullOrEmpty(_app.IsBundledWith)) return;
                 IsChecked = !_checked;
             }
             this.Click     += Toggle;
