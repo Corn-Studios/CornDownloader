@@ -200,6 +200,7 @@ namespace CornDownloader
         private string _activeCategory = "All";
         private bool   _isInstalling   = false;
         private bool   _initialized    = false;
+        private System.Threading.CancellationTokenSource _cts;
 
         // ── Controls ──────────────────────────────────────────────────────────
         private Panel           _sidebar;
@@ -213,6 +214,8 @@ namespace CornDownloader
         private Button          _installBtn;
         private Button          _upgradeBtn;
         private Button          _clearBtn;
+        private Button          _cancelBtn;
+        private Button          _logToggle;
         private TextBox         _searchBox;
         private Label           _wingetBadge;
         private TextBox         _folderBox;
@@ -261,7 +264,9 @@ namespace CornDownloader
         // ─────────────────────────────────────────────────────────────────────
         private void ApplySettings()
         {
-            if (_settings.WindowWidth > 0 && _settings.WindowHeight > 0)
+            if (_settings.WindowState == "Maximized")
+                this.WindowState = FormWindowState.Maximized;
+            else if (_settings.WindowWidth > 0 && _settings.WindowHeight > 0)
                 this.Size = new Size(_settings.WindowWidth, _settings.WindowHeight);
 
             string folder = _settings.DownloadFolder;
@@ -277,8 +282,12 @@ namespace CornDownloader
         {
             _settings.DownloadFolder = _folderBox?.Text.Trim() ?? "";
             _settings.PreferWinget   = _preferWingetChk?.Checked ?? true;
-            _settings.WindowWidth    = this.Width;
-            _settings.WindowHeight   = this.Height;
+            _settings.WindowState    = this.WindowState == FormWindowState.Maximized ? "Maximized" : "Normal";
+            if (this.WindowState == FormWindowState.Normal)
+            {
+                _settings.WindowWidth  = this.Width;
+                _settings.WindowHeight = this.Height;
+            }
             SettingsManager.Save(_settings);
         }
 
@@ -352,8 +361,11 @@ namespace CornDownloader
             var toUpgrade = _upgradeCache.Where(kv => kv.Value).Select(kv => kv.Key).ToList();
             if (toUpgrade.Count == 0) return;
 
+            _cts = new System.Threading.CancellationTokenSource();
+            var token = _cts.Token;
             _isInstalling = true; _upgradeBtn.Enabled = false; _upgradeBtn.Text = "⏳ Updating...";
             _installBtn.Enabled = false;
+            _cancelBtn.Visible = true;
             _overallProgress.Maximum = toUpgrade.Count; _overallProgress.Value = 0;
             int done = 0;
             Log($"[UPGRADE] Upgrading {toUpgrade.Count} app(s) — {DateTime.Now:HH:mm:ss}");
@@ -361,9 +373,11 @@ namespace CornDownloader
             var results = new List<InstallResult>();
             foreach (var app in toUpgrade)
             {
-                var result = await _dm.UpgradeAsync(app, msg =>
-                    this.Invoke((Action)(() =>
-                    { _statusLabel.Text = $"{app.Name}: {msg}"; Log($"[{app.Name}] {msg}"); _tiles[app].AppendLog(msg); })));
+                if (token.IsCancellationRequested) break;
+                var result = await _dm.UpgradeAsync(app,
+                    msg => this.Invoke((Action)(() =>
+                    { _statusLabel.Text = $"{app.Name}: {msg}"; Log($"[{app.Name}] {msg}"); _tiles[app].AppendLog(msg); })),
+                    token);
                 results.Add(result);
                 done++;
                 this.Invoke((Action)(() =>
@@ -375,6 +389,8 @@ namespace CornDownloader
             }
 
             _isInstalling = false; _installBtn.Enabled = true;
+            _cancelBtn.Visible = false;
+            _cts.Dispose(); _cts = null;
             int ok = results.Count(r => r.Status == InstallStatus.Success);
             int fail = results.Count(r => r.Status == InstallStatus.Failed);
             _statusLabel.Text = $"Updates done — {ok} succeeded, {fail} failed.";
@@ -385,8 +401,11 @@ namespace CornDownloader
             _upgradeBtn.Text    = remaining > 0 ? $"⬆  Update {remaining} App{(remaining == 1 ? "" : "s")}" : "";
             _upgradeBtn.Enabled = remaining > 0;
 
-            using var summary = new SummaryForm(results);
-            summary.ShowDialog(this);
+            if (!token.IsCancellationRequested)
+            {
+                using var summary = new SummaryForm(results);
+                summary.ShowDialog(this);
+            }
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -512,7 +531,9 @@ namespace CornDownloader
             // Window icon — corn on dark circle
             try { this.Icon = AppIconBuilder.Build(32); } catch { }
 
-            this.Text            = "Corn Downloader";
+            int appCount = AppCatalog.All.Count;
+            int catCount = AppCatalog.All.Select(a => a.Category).Distinct().Count();
+            this.Text = $"Corn Downloader — {appCount} apps • {catCount} categories";
             this.Size            = new Size(Dpi.S(1180), Dpi.S(760));
             this.MinimumSize     = new Size(Dpi.S(900),  Dpi.S(600));
             this.BackColor       = BG;
@@ -566,6 +587,16 @@ namespace CornDownloader
             }
 
             _bottomBar.SetBounds(0, h - botH, w, botH);
+
+            if (_clearBtn != null && _installBtn != null && _logToggle != null)
+            {
+                int bw = _bottomBar.Width;
+                _installBtn.Location = new Point(bw - Dpi.S(16) - _installBtn.Width, Dpi.S(42));
+                _clearBtn.Location   = new Point(_installBtn.Left - Dpi.S(8) - _clearBtn.Width, Dpi.S(42));
+                if (_cancelBtn != null)
+                    _cancelBtn.Location = new Point(_clearBtn.Left - Dpi.S(8) - _cancelBtn.Width, Dpi.S(42));
+                _logToggle.Location  = new Point(bw - Dpi.S(16) - _logToggle.Width, Dpi.S(11));
+            }
         }
 
         // ── TOP BAR ──────────────────────────────────────────────────────────
@@ -944,8 +975,7 @@ namespace CornDownloader
 
         private void SetAllInView(bool check)
         {
-            foreach (AppTile tile in _appGrid.Controls.OfType<AppTile>())
-                tile.IsChecked = check;
+            foreach (var tile in _tiles.Values) tile.IsChecked = check;
             UpdateSelectionCount();
         }
 
@@ -1070,7 +1100,21 @@ namespace CornDownloader
             _installBtn.FlatAppearance.BorderSize = 0;
             _installBtn.Click += OnInstallClicked;
 
-            var logToggle = new Button
+            _cancelBtn = new Button
+            {
+                Text      = "✗ CANCEL",
+                Size      = new Size(Dpi.S(110), Dpi.S(36)),
+                BackColor = Color.FromArgb(239, 68, 68),
+                ForeColor = Color.White,
+                FlatStyle = FlatStyle.Flat,
+                Font      = new Font("Courier New", 7.5f, FontStyle.Bold),
+                Cursor    = Cursors.Hand,
+                Visible   = false
+            };
+            _cancelBtn.FlatAppearance.BorderSize = 0;
+            _cancelBtn.Click += (s, e) => _cts?.Cancel();
+
+            _logToggle = new Button
             {
                 Text      = "// LOG",
                 Size      = new Size(Dpi.S(65), Dpi.S(24)),
@@ -1081,14 +1125,14 @@ namespace CornDownloader
                 Font      = new Font("Courier New", 7f, FontStyle.Bold),
                 Cursor    = Cursors.Hand
             };
-            logToggle.FlatAppearance.BorderColor = BORDER;
-            logToggle.FlatAppearance.BorderSize  = 1;
-            logToggle.Click += (s, e) => ToggleLog();
+            _logToggle.FlatAppearance.BorderColor = BORDER;
+            _logToggle.FlatAppearance.BorderSize  = 1;
+            _logToggle.Click += (s, e) => ToggleLog();
 
             _bottomBar.Controls.AddRange(new Control[] {
                 folderLbl, _folderBox, _browseBtn, _preferWingetChk,
                 _overallProgress, _statusLabel, _selectionCountLabel,
-                _clearBtn, _installBtn, logToggle
+                _clearBtn, _cancelBtn, _installBtn, _logToggle
             });
 
             _logBox = new RichTextBox
@@ -1168,9 +1212,12 @@ namespace CornDownloader
             }
 
             bool preferWinget = _preferWingetChk.Checked;
+            _cts = new System.Threading.CancellationTokenSource();
+            var token = _cts.Token;
             _isInstalling            = true;
             _installBtn.Enabled      = false;
             _installBtn.Text         = "⏳ Installing...";
+            _cancelBtn.Visible       = true;
             _overallProgress.Value   = 0;
             _overallProgress.Maximum = selected.Count;
 
@@ -1185,7 +1232,7 @@ namespace CornDownloader
                         if (_tiles.TryGetValue(app, out var tile))
                         {
                             tile.SetStatus(status);
-                            tile.AppendLog(msg);   // ← per-app log
+                            tile.AppendLog(msg);
                             int pct = ParsePercent(msg);
                             if (pct >= 0 && (status == InstallStatus.Installing || status == InstallStatus.Downloading))
                                 tile.SetProgress(pct);
@@ -1194,18 +1241,26 @@ namespace CornDownloader
                         Log($"[{app.Name}] {msg}");
                     }));
                 },
-                (done, total) => this.Invoke((Action)(() => _overallProgress.Value = done))
+                (done, total) => this.Invoke((Action)(() => _overallProgress.Value = done)),
+                token
             );
 
-            int ok   = results.Count(r => r.Status == InstallStatus.Success);
-            int fail = results.Count(r => r.Status == InstallStatus.Failed);
+            int ok      = results.Count(r => r.Status == InstallStatus.Success);
+            int fail    = results.Count(r => r.Status == InstallStatus.Failed);
+            int skipped = results.Count(r => r.Status == InstallStatus.Skipped);
 
-            _statusLabel.Text   = $"Done — {ok} succeeded, {fail} failed.";
+            string doneMsg = $"Done — {ok} succeeded, {fail} failed";
+            if (skipped > 0) doneMsg += $", {skipped} skipped";
+            _statusLabel.Text   = doneMsg + ".";
             _installBtn.Text    = "⬇  INSTALL";
             _installBtn.Enabled = true;
+            _cancelBtn.Visible  = false;
             _isInstalling       = false;
+            _cts.Dispose(); _cts = null;
 
             Log($"[DONE] {ok}/{selected.Count} succeeded — {DateTime.Now:HH:mm:ss}");
+
+            if (token.IsCancellationRequested) return;
 
             var pendingResults = results;
             while (true)
@@ -1217,7 +1272,9 @@ namespace CornDownloader
                 var retryApps = summary.FailedResults.Select(r => r.App).ToList();
                 Log($"[RETRY] Retrying {retryApps.Count} failed app(s)...");
 
+                _cts = new System.Threading.CancellationTokenSource();
                 _isInstalling = true; _installBtn.Enabled = false; _installBtn.Text = "⏳ Retrying...";
+                _cancelBtn.Visible = true;
                 _overallProgress.Maximum = retryApps.Count; _overallProgress.Value = 0;
 
                 pendingResults = await _dm.InstallAllAsync(
@@ -1228,9 +1285,12 @@ namespace CornDownloader
                         _statusLabel.Text = $"{app.Name}: {msg}";
                         Log($"[{app.Name}] {msg}");
                     })),
-                    (done2, total2) => this.Invoke((Action)(() => _overallProgress.Value = done2)));
+                    (done2, total2) => this.Invoke((Action)(() => _overallProgress.Value = done2)),
+                    _cts.Token);
 
                 _isInstalling = false; _installBtn.Enabled = true; _installBtn.Text = "⬇  INSTALL";
+                _cancelBtn.Visible = false;
+                _cts.Dispose(); _cts = null;
             }
         }
 
@@ -1288,11 +1348,13 @@ namespace CornDownloader
         private static readonly Color _border2 = Color.FromArgb( 61,  58, 112);
         private static readonly Color _bg      = Color.FromArgb(  8,   8,  18);
         private static readonly Color _surface = Color.FromArgb( 19,  18,  42);
+        private static readonly Color _meteor  = Color.FromArgb(244,  81,  30);
 
         private bool   _checked;
-        private bool   _isInstalled = false;
-        private bool   _hasUpdate   = false;
-        private bool   _logExpanded = false;
+        private bool   _isInstalled    = false;
+        private bool   _hasUpdate      = false;
+        private bool   _logExpanded    = false;
+        private bool   _forceReinstall = false;
 
         private readonly Color _normalBg;
         private readonly Color _checkedBg;
@@ -1321,10 +1383,13 @@ namespace CornDownloader
             get => _checked;
             set
             {
-                // Can't select installed apps or apps that are bundled inside another package.
-                if (value && (_isInstalled || !string.IsNullOrEmpty(_app.IsBundledWith))) return;
+                if (value && !string.IsNullOrEmpty(_app.IsBundledWith)) return;
+                if (value && _isInstalled && !_forceReinstall) return;
                 _checked  = value;
-                BackColor = value ? _checkedBg : _normalBg;
+                if (!value) { _forceReinstall = false; _app.ForceReinstall = false; }
+                BackColor = value
+                    ? (_forceReinstall ? Color.FromArgb(20, 244, 81, 30) : _checkedBg)
+                    : _normalBg;
                 Invalidate();
                 CheckedChanged?.Invoke(this, EventArgs.Empty);
             }
@@ -1347,19 +1412,21 @@ namespace CornDownloader
             this.Paint += (s, e) =>
             {
                 var g = e.Graphics;
-                Color borderCol = _isInstalled ? Color.FromArgb(42, 40, 80)
-                    : _checked ? accent : border;
-                using (var pen = new System.Drawing.Pen(borderCol, _isInstalled ? 1f : 1.5f))
+                Color borderCol = _isInstalled && !_forceReinstall ? Color.FromArgb(42, 40, 80)
+                    : _checked ? (_forceReinstall ? _meteor : accent) : border;
+                float borderW = (_isInstalled && !_forceReinstall) ? 1f : 1.5f;
+                using (var pen = new System.Drawing.Pen(borderCol, borderW))
                     g.DrawRectangle(pen, 0, 0, Width - 1, Height - 1);
 
-                if (_isInstalled)
+                if (_isInstalled && !_forceReinstall)
                 {
                     using var b = new SolidBrush(Color.FromArgb(60, 76, 175, 80));
                     g.FillRectangle(b, 1, 1, Width - 2, Dpi.S(3));
                 }
                 else if (_checked)
                 {
-                    using var brush = new SolidBrush(accent);
+                    Color checkFill = _forceReinstall ? _meteor : accent;
+                    using var brush = new SolidBrush(checkFill);
                     g.FillRectangle(brush, Width - Dpi.S(22), Dpi.S(6), Dpi.S(16), Dpi.S(16));
                     using var whitePen = new System.Drawing.Pen(Color.White, 2f);
                     g.DrawLines(whitePen, new[]
@@ -1587,7 +1654,8 @@ namespace CornDownloader
             // ── Click-to-toggle ───────────────────────────────────────────────
             void Toggle(object s, EventArgs e)
             {
-                if (_isInstalled || !string.IsNullOrEmpty(_app.IsBundledWith)) return;
+                if (!string.IsNullOrEmpty(_app.IsBundledWith)) return;
+                if (_isInstalled && !_forceReinstall) return;
                 IsChecked = !_checked;
             }
             this.Click     += Toggle;
@@ -1598,6 +1666,66 @@ namespace CornDownloader
 
             this.MouseEnter += (s, e) => { if (!_checked) BackColor = Color.FromArgb(19, 18, 45); };
             this.MouseLeave += (s, e) => { if (!_checked) BackColor = _normalBg; };
+
+            // ── Right-click context menu ──────────────────────────────────────
+            var cms = new ContextMenuStrip();
+            cms.Opening += (s, e) =>
+            {
+                cms.Items.Clear();
+                if (!string.IsNullOrEmpty(_app.IsBundledWith))
+                {
+                    var bundledItem = new ToolStripMenuItem($"Bundled with {_app.IsBundledWith}") { Enabled = false };
+                    cms.Items.Add(bundledItem);
+                    return;
+                }
+                if (_isInstalled)
+                {
+                    if (_forceReinstall && _checked)
+                    {
+                        var cancelItem = new ToolStripMenuItem("Cancel Reinstall");
+                        cancelItem.Click += (cs, ce) => { IsChecked = false; };
+                        cms.Items.Add(cancelItem);
+                    }
+                    else
+                    {
+                        var forceItem = new ToolStripMenuItem("Force Reinstall");
+                        forceItem.Click += (cs, ce) =>
+                        {
+                            _forceReinstall    = true;
+                            _app.ForceReinstall = true;
+                            _checked           = false;  // reset so setter logic runs cleanly
+                            IsChecked          = true;
+                            Cursor             = Cursors.Hand;
+                        };
+                        cms.Items.Add(forceItem);
+                    }
+                }
+                else
+                {
+                    var selItem = new ToolStripMenuItem(_checked ? "Deselect" : "Select");
+                    selItem.Click += (cs, ce) => IsChecked = !_checked;
+                    cms.Items.Add(selItem);
+                }
+                if (!string.IsNullOrEmpty(_app.WingetId))
+                {
+                    cms.Items.Add(new ToolStripSeparator());
+                    var idItem = new ToolStripMenuItem($"winget id: {_app.WingetId}") { Enabled = false };
+                    cms.Items.Add(idItem);
+                }
+            };
+            this.ContextMenuStrip = cms;
+
+            // ── Tooltip (full description + install method) ───────────────────
+            string tipMethod = !string.IsNullOrEmpty(_app.WingetId) ? $"winget: {_app.WingetId}"
+                             : !string.IsNullOrEmpty(_app.IsBundledWith) ? $"bundled with: {_app.IsBundledWith}"
+                             : "direct download";
+            string tipText = $"{app.Description}\n\n{tipMethod}";
+            var tip = new ToolTip { AutoPopDelay = 8000, InitialDelay = 600, ReshowDelay = 300, ShowAlways = true };
+            tip.SetToolTip(this,        tipText);
+            tip.SetToolTip(iconLbl,     tipText);
+            tip.SetToolTip(nameLbl,     tipText);
+            tip.SetToolTip(descLbl,     tipText);
+            tip.SetToolTip(methodBadge, tipText);
         }
 
         // ── Version picker toggle ─────────────────────────────────────────────
@@ -1716,12 +1844,14 @@ namespace CornDownloader
             _isInstalled = installed;
             if (installed)
             {
-                _statusDot.Text      = "✔ Installed";
+                _forceReinstall    = false;
+                _app.ForceReinstall = false;
+                _statusDot.Text    = "✔ Installed";
                 _statusDot.ForeColor = Color.FromArgb(34, 197, 94);
-                _statusDot.Visible   = true;
-                BackColor            = _normalBg;
-                _checked             = false;
-                Cursor               = Cursors.Default;
+                _statusDot.Visible = true;
+                BackColor          = _normalBg;
+                _checked           = false;
+                Cursor             = Cursors.Hand;
             }
             Invalidate();
         }
@@ -1981,6 +2111,7 @@ namespace CornDownloader
         public bool   PreferWinget   { get; set; } = true;
         public int    WindowWidth    { get; set; } = 1180;
         public int    WindowHeight   { get; set; } = 760;
+        public string WindowState    { get; set; } = "Maximized";
     }
 
     internal static class SettingsManager

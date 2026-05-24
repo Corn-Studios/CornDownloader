@@ -176,6 +176,7 @@ namespace CornDownloader
                 {
                     if (e.Data != null) output.AppendLine(e.Data);
                 };
+                proc.ErrorDataReceived += (s, e) => { };
                 proc.Exited += (s, e) => tcs.TrySetResult(true);
                 proc.Start();
                 proc.BeginOutputReadLine();
@@ -271,7 +272,8 @@ namespace CornDownloader
         /// <summary>
         /// Upgrades an already-installed app via winget upgrade.
         /// </summary>
-        public async Task<InstallResult> UpgradeAsync(AppEntry app, Action<string> onProgress)
+        public async Task<InstallResult> UpgradeAsync(AppEntry app, Action<string> onProgress,
+            System.Threading.CancellationToken cancellationToken = default)
         {
             var result = new InstallResult { App = app, Status = InstallStatus.Installing };
             onProgress?.Invoke($"Upgrading {app.Name}...");
@@ -304,7 +306,15 @@ namespace CornDownloader
                 proc.Start();
                 proc.BeginOutputReadLine();
                 proc.BeginErrorReadLine();
-                await tcs.Task;
+
+                await Task.WhenAny(tcs.Task, Task.Delay(System.Threading.Timeout.Infinite, cancellationToken));
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    try { if (!proc.HasExited) proc.Kill(true); } catch { }
+                    result.Status  = InstallStatus.Skipped;
+                    result.Message = "Cancelled.";
+                    return result;
+                }
 
                 if (proc.ExitCode == 0 || proc.ExitCode == -1978335189)
                 {
@@ -330,9 +340,17 @@ namespace CornDownloader
             AppEntry app,
             string downloadFolder,
             bool preferWinget,
-            Action<string> onProgress)
+            Action<string> onProgress,
+            System.Threading.CancellationToken cancellationToken = default)
         {
             var result = new InstallResult { App = app, Status = InstallStatus.Pending };
+
+            if (cancellationToken.IsCancellationRequested)
+            {
+                result.Status  = InstallStatus.Skipped;
+                result.Message = "Cancelled.";
+                return result;
+            }
 
             // Bundled apps (e.g. FancyZones inside PowerToys) can't be installed standalone.
             if (!string.IsNullOrEmpty(app.IsBundledWith))
@@ -355,18 +373,19 @@ namespace CornDownloader
 
             if (useWinget)
             {
-                return await InstallViaWinget(app, result, onProgress);
+                return await InstallViaWinget(app, result, onProgress, cancellationToken);
             }
             else
             {
-                return await InstallViaDirectUrl(app, downloadFolder, result, onProgress);
+                return await InstallViaDirectUrl(app, downloadFolder, result, onProgress, cancellationToken);
             }
         }
 
         private async Task<InstallResult> InstallViaWinget(
             AppEntry app,
             InstallResult result,
-            Action<string> onProgress)
+            Action<string> onProgress,
+            System.Threading.CancellationToken cancellationToken = default)
         {
             result.Status = InstallStatus.Installing;
             onProgress?.Invoke($"Installing {app.Name} via winget...");
@@ -374,12 +393,13 @@ namespace CornDownloader
             try
             {
                 var tcs = new TaskCompletionSource<bool>();
+                string forceFlag = app.ForceReinstall ? " --force" : "";
                 var psi = new ProcessStartInfo
                 {
                     FileName = "winget",
                     Arguments = string.IsNullOrEmpty(app.PinnedVersion)
-                        ? $"install --id {app.WingetId} --silent --accept-source-agreements --accept-package-agreements"
-                        : $"install --id {app.WingetId} --version \"{app.PinnedVersion}\" --silent --accept-source-agreements --accept-package-agreements",
+                        ? $"install --id {app.WingetId} --silent --accept-source-agreements --accept-package-agreements{forceFlag}"
+                        : $"install --id {app.WingetId} --version \"{app.PinnedVersion}\" --silent --accept-source-agreements --accept-package-agreements{forceFlag}",
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     UseShellExecute = false,
@@ -408,7 +428,14 @@ namespace CornDownloader
                 proc.BeginOutputReadLine();
                 proc.BeginErrorReadLine();
 
-                await tcs.Task;
+                await Task.WhenAny(tcs.Task, Task.Delay(System.Threading.Timeout.Infinite, cancellationToken));
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    try { if (!proc.HasExited) proc.Kill(true); } catch { }
+                    result.Status  = InstallStatus.Skipped;
+                    result.Message = "Cancelled.";
+                    return result;
+                }
 
                 if (proc.ExitCode == 0 || proc.ExitCode == -1978335189) // already installed
                 {
@@ -443,7 +470,8 @@ namespace CornDownloader
             AppEntry app,
             string downloadFolder,
             InstallResult result,
-            Action<string> onProgress)
+            Action<string> onProgress,
+            System.Threading.CancellationToken cancellationToken = default)
         {
             result.Status = InstallStatus.Downloading;
             onProgress?.Invoke($"Downloading {app.Name}...");
@@ -452,7 +480,7 @@ namespace CornDownloader
 
             try
             {
-                using (var response = await _httpClient.GetAsync(app.DirectUrl, HttpCompletionOption.ResponseHeadersRead))
+                using (var response = await _httpClient.GetAsync(app.DirectUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken))
                 {
                     response.EnsureSuccessStatusCode();
                     long? totalBytes = response.Content.Headers.ContentLength;
@@ -463,9 +491,9 @@ namespace CornDownloader
                         var buffer    = new byte[81920];
                         long read     = 0;
                         int  bytes;
-                        while ((bytes = await stream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                        while ((bytes = await stream.ReadAsync(buffer, 0, buffer.Length, cancellationToken)) > 0)
                         {
-                            await file.WriteAsync(buffer, 0, bytes);
+                            await file.WriteAsync(buffer, 0, bytes, cancellationToken);
                             read += bytes;
                             if (totalBytes > 0)
                             {
@@ -480,7 +508,6 @@ namespace CornDownloader
                 result.Status = InstallStatus.Installing;
 
                 string ext = Path.GetExtension(app.FileName).ToLowerInvariant();
-                string args = ext == ".msi" ? $"/i \"{destPath}\" /passive /norestart" : "/S /silent /quiet /passive /norestart";
 
                 var psi = ext == ".msi"
                     ? new ProcessStartInfo("msiexec", $"/i \"{destPath}\" /passive /norestart")
@@ -495,7 +522,15 @@ namespace CornDownloader
                     };
 
                 var proc = Process.Start(psi);
+                using var reg = cancellationToken.Register(() => { try { proc?.Kill(true); } catch { } });
                 await Task.Run(() => proc.WaitForExit());
+
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    result.Status  = InstallStatus.Skipped;
+                    result.Message = "Cancelled.";
+                    return result;
+                }
 
                 // Exit code 0 = success; many silent installers also use 1641 (reboot needed)
                 // or 3010 (reboot scheduled) as non-error codes.
@@ -510,6 +545,11 @@ namespace CornDownloader
                     result.Status  = InstallStatus.Failed;
                     result.Message = $"Installer exited with code {exitCode}.";
                 }
+            }
+            catch (OperationCanceledException)
+            {
+                result.Status  = InstallStatus.Skipped;
+                result.Message = "Cancelled.";
             }
             catch (Exception ex)
             {
@@ -530,7 +570,8 @@ namespace CornDownloader
             string downloadFolder,
             bool preferWinget,
             Action<AppEntry, InstallStatus, string> onAppProgress,
-            Action<int, int> onOverallProgress)
+            Action<int, int> onOverallProgress,
+            System.Threading.CancellationToken cancellationToken = default)
         {
             var results     = new List<InstallResult>();
             var resultsLock = new object();
@@ -546,10 +587,22 @@ namespace CornDownloader
                 await semaphore.WaitAsync();
                 try
                 {
+                    if (cancellationToken.IsCancellationRequested)
+                    {
+                        lock (resultsLock) { results.Add(new InstallResult { App = app, Status = InstallStatus.Skipped, Message = "Cancelled." }); done++; }
+                        onOverallProgress?.Invoke(done, total);
+                        onAppProgress?.Invoke(app, InstallStatus.Skipped, "Cancelled.");
+                        return;
+                    }
+
                     onAppProgress?.Invoke(app, InstallStatus.Installing, $"Starting {app.Name}...");
 
                     var result = await InstallAsync(app, downloadFolder, preferWinget,
-                        msg => onAppProgress?.Invoke(app, InstallStatus.Installing, msg));
+                        msg =>
+                        {
+                            var st = msg.StartsWith("Downloading") ? InstallStatus.Downloading : InstallStatus.Installing;
+                            onAppProgress?.Invoke(app, st, msg);
+                        }, cancellationToken);
 
                     lock (resultsLock)
                     {
