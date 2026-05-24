@@ -3,7 +3,7 @@
 > A fast, open-source Windows app installer built in C# / WinForms by Corn Studios.  
 > Drop it on a fresh Windows install, pick your apps, and hit install — winget handles the rest.
 
-**Version:** `1.1.0`  
+**Version:** `1.2.0`  
 **Platform:** Windows 10 / 11 (64-bit)  
 **Runtime:** .NET 10 Desktop Runtime  
 **License:** MIT
@@ -27,6 +27,15 @@ Sources are refreshed silently on startup via `winget source update` so installs
 ### ⚡ Parallel Installs
 Up to **3 apps install concurrently** — enough to saturate most connections without causing installer conflicts. A progress bar and live status label track the queue in real time.
 
+### ✗ Cancel at Any Time
+A **Cancel** button appears in the bottom bar as soon as an install or upgrade run starts. Clicking it gracefully aborts the remaining queue — in-flight processes are killed, and anything not yet started is skipped. The summary still reports what succeeded before the cancellation.
+
+### 🔁 Force Reinstall
+Already-installed tiles are grayed out and unselectable by default. **Right-clicking** any installed tile reveals a **Force Reinstall** option, which re-queues it with `--force` and marks it with an orange border so it stands out from a normal selection. Right-click again to cancel the force before running.
+
+### 💬 Tile Tooltips
+Hovering over any app tile shows a tooltip with the **full description** and the **winget package ID** — useful for apps whose names get truncated in the tile view.
+
 ### 📋 Summary Dialog
 After every install or upgrade run, a summary dialog breaks results into **Installed successfully** and **Failed** sections, with a **↺ Retry Failed** button to immediately retry any apps that errored.
 
@@ -40,7 +49,7 @@ For direct URL installs, you can set any download folder via the bottom bar. The
 A toggleable terminal-style log panel at the bottom of the window streams real-time output from winget and installer processes — useful for diagnosing failures without leaving the app.
 
 ### 💾 Persistent Settings
-Window size, download folder, and winget preference are saved automatically to `%AppData%\CornStudios\CornDownloader\settings.json` and restored on next launch.
+Window size, window state, download folder, and winget preference are saved automatically to `%AppData%\CornStudios\CornDownloader\settings.json` and restored on next launch. The app opens **maximized** by default.
 
 ---
 
@@ -58,22 +67,20 @@ Window size, download folder, and winget preference are saved automatically to `
 | 🔧 Utilities & System Tools | 7-Zip, NanaZip, Everything Search, CPU-Z, HWiNFO, HWMonitor, CrystalDiskInfo, WinDirStat, Autoruns, Malwarebytes, PowerToys, GPU-Z, Revo Uninstaller, OpenVPN, ProtonVPN, WireGuard, Microsoft PC Manager, BleachBit, O&O ShutUp10++, Bulk Rename Utility, Process Hacker, Ventoy, Rufus, EqualizerAPO, and more |
 | 🎨 Customization | Rainmeter, Lively Wallpaper, TranslucentTB, StartAllBack, EarTrumpet, Windhawk, YASB, ModernFlyouts, Komorebi, GlazeWM, ExplorerPatcher, FancyZones (PowerToys) |
 
-Apps marked as **Recommended** are pre-selected on launch (Firefox, VS Code, Git, VLC, Discord, Steam, 7-Zip, PowerToys, Notepad++).
-
 ---
 
 ## Requirements
 
 - Windows 10 or 11 (64-bit)
 - [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)
-- [winget](https://aka.ms/getwinget) *(recommended direct URL fallback available without it)*
+- [winget](https://aka.ms/getwinget) *(recommended — direct URL fallback available without it)*
 
 ---
 
 ## Installation
 
 1. Go to [Releases](https://github.com/ConnorCorn07/CornDownloader/releases) and download the latest `.exe`
-2. Run it: no installation required, it's a single portable executable
+2. Run it — no installation required, it's a single portable executable
 
 ## Build from Source
 
@@ -96,7 +103,7 @@ Apps marked as **Recommended** are pre-selected on launch (Firefox, VS Code, Git
 
 ## Notes
 
-- Winget installs are fully silent, no installer windows
+- Winget installs are fully silent — no installer windows appear
 - Direct URL installs launch the installer with silent flags and request elevation via UAC once
 - Installer files downloaded via direct URL are deleted automatically after a successful run
 - The "prefer winget" checkbox is disabled automatically if winget is not detected on your system
@@ -106,7 +113,7 @@ Apps marked as **Recommended** are pre-selected on launch (Firefox, VS Code, Git
 
 ## License
 
-MIT: see [LICENSE](LICENSE)
+MIT — see [LICENSE](LICENSE)
 
 ---
 
