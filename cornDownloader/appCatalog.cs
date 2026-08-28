@@ -969,6 +969,38 @@ namespace CornDownloader
                 DirectUrl = null,
                 FileName = null,
             },
+
+            // ── GAMING (batch 3) ──────────────────────────────────────────────
+            new AppEntry {
+                Name = "Genshin Impact", Category = "Gaming", IconChar = "⚔️",
+                Description = "Open-world gacha action RPG by HoYoverse",
+                WingetId = "miHoYo.GenshinImpact",
+                DirectUrl = null,
+                FileName = null,
+            },
+
+            // ── UTILITIES & SYSTEM TOOLS (batch 3) ─────────────────────────────
+            new AppEntry {
+                Name = "Logitech G HUB", Category = "Utilities & System Tools", IconChar = "🖱️",
+                Description = "Configure and customize Logitech G gaming peripherals",
+                WingetId = "Logitech.GHUB",
+                DirectUrl = "https://download01.logi.com/web/ftp/pub/techsupport/gaming/lghub_installer.exe",
+                FileName = "lghub_installer.exe",
+            },
+            new AppEntry {
+                // NOTE: NVIDIA App is NOT on winget — Microsoft's validation pipeline
+                // requires physical NVIDIA hardware to test against, which has blocked
+                // the community package (see microsoft/winget-pkgs discussion #200910).
+                // DirectUrl below is version-pinned (11.0.8.299) since NVIDIA does not
+                // publish a stable "latest" redirect link like Firefox/Brave/VS Code do.
+                // This WILL go stale — revisit periodically or replace with a small
+                // scraper against nvidia.com/en-us/software/nvidia-app/ if that's worth it.
+                Name = "NVIDIA App", Category = "Utilities & System Tools", IconChar = "🟩",
+                Description = "GPU driver updates, game optimization, and overlay tools",
+                WingetId = null,
+                DirectUrl = "https://us.download.nvidia.com/nvapp/client/11.0.8.299/NVIDIA_app_v11.0.8.299.exe",
+                FileName = "NVIDIA_app_setup.exe",
+            },
         };
     }
 }
