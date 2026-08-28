@@ -164,6 +164,10 @@ namespace CornDownloader
 
     internal class PackedApp
     {
+        // Id is the primary match key (stable across renames). Name is kept alongside it
+        // purely for human readability when someone opens the .corn file, and as a fallback
+        // match for packs exported before Id existed.
+        public string Id            { get; set; }
         public string Name          { get; set; }
         public string PinnedVersion { get; set; }   // null = latest
     }
@@ -201,6 +205,10 @@ namespace CornDownloader
         private bool   _isInstalling   = false;
         private bool   _initialized    = false;
         private System.Threading.CancellationTokenSource _cts;
+        // Tracks the fire-and-forget startup upgrade scan (see RunStartupAsync). Installs
+        // and upgrades await this first so they never call winget concurrently with it —
+        // winget only allows one instance against its source DB at a time.
+        private Task _upgradeScanTask;
 
         // ── Controls ──────────────────────────────────────────────────────────
         private Panel           _sidebar;
@@ -224,6 +232,13 @@ namespace CornDownloader
         private RichTextBox     _logBox;
         private Panel           _logPanel;
         private Label           _scanStatusLabel;
+        // Shared across every AppTile instead of one ToolTip component per tile —
+        // with 100+ catalog entries that was 100+ native tooltip windows that never
+        // got disposed. One shared instance, disposed on form close, is enough.
+        private readonly ToolTip _sharedTileTip = new ToolTip
+        {
+            AutoPopDelay = 8000, InitialDelay = 600, ReshowDelay = 300, ShowAlways = true
+        };
 
         private readonly string[] _categories;
         private AppSettings _settings;
@@ -237,12 +252,14 @@ namespace CornDownloader
                 .ToArray();
 
             InitializeComponent();
+            ValidateCatalog();
             ApplySettings();
             PopulateApps("All");
             UpdateSelectionCount();
             _ = RunStartupAsync();
 
             this.FormClosing += (s, e) => SaveSettings();
+            this.FormClosing += (s, e) => { try { _sharedTileTip.Dispose(); } catch { } };
 
             // Also save on meaningful state changes so a crash doesn't lose settings.
             this.ResizeEnd          += (s, e) => SaveSettings();
@@ -250,11 +267,49 @@ namespace CornDownloader
             if (_preferWingetChk  != null) _preferWingetChk.CheckedChanged += (s, e) => SaveSettings();
         }
 
+        /// <summary>
+        /// Checks every catalog entry for the kind of gap that's easy to introduce by hand
+        /// (a copy-pasted entry missing a field, a new app with neither a winget ID nor a
+        /// direct URL) and logs anything it finds instead of letting it surface later as a
+        /// crash or a silently-broken tile. Runs once at startup; cheap enough not to matter.
+        /// </summary>
+        private void ValidateCatalog()
+        {
+            var issues  = new List<string>();
+            var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var app in AppCatalog.All)
+            {
+                string label = string.IsNullOrEmpty(app.Name) ? $"(unnamed, Id='{app.Id}')" : app.Name;
+
+                if (string.IsNullOrEmpty(app.Name))     issues.Add($"{label}: missing Name.");
+                if (string.IsNullOrEmpty(app.Description)) issues.Add($"{label}: missing Description.");
+                if (string.IsNullOrEmpty(app.Category)) issues.Add($"{label}: missing Category.");
+
+                if (string.IsNullOrEmpty(app.Id))
+                    issues.Add($"{label}: missing Id (export/import packs won't survive a rename).");
+                else if (!seenIds.Add(app.Id))
+                    issues.Add($"{label}: duplicate Id '{app.Id}'.");
+
+                if (!app.HasInstallMethod)
+                    issues.Add($"{label}: no install method — needs WingetId, DirectUrl+FileName, or IsBundledWith.");
+            }
+
+            if (issues.Count > 0)
+            {
+                Log($"[CATALOG] {issues.Count} issue(s) found at startup:");
+                foreach (var issue in issues) Log($"  - {issue}");
+            }
+
+            System.Diagnostics.Debug.Assert(issues.Count == 0,
+                $"AppCatalog has {issues.Count} integrity issue(s) — see the log panel for details.");
+        }
+
         private async Task RunStartupAsync()
         {
             await RefreshWingetSourcesAsync();
             await ScanInstalledAsync();
-            _ = ScanUpgradesAsync();
+            _upgradeScanTask = ScanUpgradesAsync();
             _initialized = true;
             UpdateSelectionCount();   // now safe to push the real badge
         }
@@ -355,11 +410,32 @@ namespace CornDownloader
             }));
         }
 
+        /// <summary>
+        /// If the startup upgrade scan is still running, wait for it before issuing any
+        /// other winget command. Winget only allows one instance against its source DB at
+        /// a time, so an install or upgrade fired while the scan is mid-flight can fail
+        /// with a spurious "another WinGet process is running" error.
+        /// </summary>
+        private async Task WaitForBackgroundScanAsync()
+        {
+            if (_upgradeScanTask != null && !_upgradeScanTask.IsCompleted)
+            {
+                if (_scanStatusLabel != null)
+                {
+                    _scanStatusLabel.Text      = "⏳ Waiting for background scan to finish...";
+                    _scanStatusLabel.ForeColor = TEXT_SEC;
+                }
+                try { await _upgradeScanTask; } catch { /* scan already handles/logs its own failures */ }
+            }
+        }
+
         private async void OnUpgradeClicked(object sender, EventArgs e)
         {
             if (_isInstalling) return;
             var toUpgrade = _upgradeCache.Where(kv => kv.Value).Select(kv => kv.Key).ToList();
             if (toUpgrade.Count == 0) return;
+
+            await WaitForBackgroundScanAsync();
 
             _cts = new System.Threading.CancellationTokenSource();
             var token = _cts.Token;
@@ -435,6 +511,7 @@ namespace CornDownloader
                 CreatedAt = DateTime.Now.ToString("o"),
                 Apps = selected.Select(a => new PackedApp
                 {
+                    Id            = a.Id,
                     Name          = a.Name,
                     PinnedVersion = a.PinnedVersion
                 }).ToList()
@@ -481,7 +558,12 @@ namespace CornDownloader
                 int matched = 0;
                 foreach (var packed in pack.Apps)
                 {
-                    var entry = AppCatalog.All.FirstOrDefault(a =>
+                    // Prefer the stable Id (survives a Name rename in a later catalog update).
+                    // Fall back to Name for packs exported before Id existed.
+                    var entry = !string.IsNullOrEmpty(packed.Id)
+                        ? AppCatalog.All.FirstOrDefault(a => string.Equals(a.Id, packed.Id, StringComparison.OrdinalIgnoreCase))
+                        : null;
+                    entry ??= AppCatalog.All.FirstOrDefault(a =>
                         string.Equals(a.Name, packed.Name, StringComparison.OrdinalIgnoreCase));
                     if (entry == null) continue;
 
@@ -934,8 +1016,8 @@ namespace CornDownloader
 
             string search = _searchBox?.Text?.Trim().ToLowerInvariant() ?? "";
             if (!string.IsNullOrEmpty(search))
-                apps = apps.Where(a => a.Name.ToLowerInvariant().Contains(search) ||
-                                       a.Description.ToLowerInvariant().Contains(search));
+                apps = apps.Where(a => (a.Name ?? "").ToLowerInvariant().Contains(search) ||
+                                       (a.Description ?? "").ToLowerInvariant().Contains(search));
 
             foreach (var group in apps.ToList().GroupBy(a => a.Category).OrderBy(g => g.Key))
             {
@@ -947,7 +1029,7 @@ namespace CornDownloader
                 {
                     if (!_tiles.TryGetValue(app, out var tile))
                     {
-                        tile = new AppTile(app, CARD, SURFACE2, ACCENT, TEXT_PRI, TEXT_SEC, BORDER, _dm);
+                        tile = new AppTile(app, CARD, SURFACE2, ACCENT, TEXT_PRI, TEXT_SEC, BORDER, _dm, _sharedTileTip);
                         tile.IsChecked      = false;
                         tile.CheckedChanged += (s, e) => UpdateSelectionCount();
                         _tiles[app] = tile;
@@ -1212,6 +1294,8 @@ namespace CornDownloader
             }
 
             bool preferWinget = _preferWingetChk.Checked;
+            await WaitForBackgroundScanAsync();
+
             _cts = new System.Threading.CancellationTokenSource();
             var token = _cts.Token;
             _isInstalling            = true;
@@ -1360,6 +1444,7 @@ namespace CornDownloader
         private readonly Color _checkedBg;
         private readonly AppEntry   _app;
         private readonly DownloadManager _dm;
+        private readonly ToolTip _sharedTip;
 
         // Sub-controls
         private readonly Label       _statusDot;
@@ -1384,6 +1469,7 @@ namespace CornDownloader
             set
             {
                 if (value && !string.IsNullOrEmpty(_app.IsBundledWith)) return;
+                if (value && !_app.HasInstallMethod) return;
                 if (value && _isInstalled && !_forceReinstall) return;
                 _checked  = value;
                 if (!value) { _forceReinstall = false; _app.ForceReinstall = false; }
@@ -1396,17 +1482,18 @@ namespace CornDownloader
         }
 
         public AppTile(AppEntry app, Color normalBg, Color checkedBg, Color accent,
-                       Color textPri, Color textSec, Color border, DownloadManager dm)
+                       Color textPri, Color textSec, Color border, DownloadManager dm, ToolTip sharedTip)
         {
             _app       = app;
             _dm        = dm;
             _normalBg  = normalBg;
             _checkedBg = checkedBg;
+            _sharedTip = sharedTip;
 
             Size      = new Size(Dpi.S(230), Dpi.S(BASE_HEIGHT));
             BackColor = normalBg;
             Margin    = new Padding(Dpi.S(6));
-            Cursor    = Cursors.Hand;
+            Cursor    = _app.HasInstallMethod ? Cursors.Hand : Cursors.No;
 
             // ── Border + checkmark paint ──────────────────────────────────────
             this.Paint += (s, e) =>
@@ -1489,10 +1576,17 @@ namespace CornDownloader
                 method  = "winget";
                 badgeFg = Color.FromArgb(245, 200, 66);
             }
-            else
+            else if (!string.IsNullOrEmpty(app.DirectUrl) && !string.IsNullOrEmpty(app.FileName))
             {
                 method  = "direct";
                 badgeFg = Color.FromArgb(160, 157, 192);
+            }
+            else
+            {
+                // Neither winget nor a direct URL is configured — this entry can't actually
+                // be installed yet. Say so instead of silently claiming "direct".
+                method  = "⚠ no install";
+                badgeFg = Color.FromArgb(244, 81, 30);
             }
 
             var methodBadge = new Label
@@ -1718,14 +1812,15 @@ namespace CornDownloader
             // ── Tooltip (full description + install method) ───────────────────
             string tipMethod = !string.IsNullOrEmpty(_app.WingetId) ? $"winget: {_app.WingetId}"
                              : !string.IsNullOrEmpty(_app.IsBundledWith) ? $"bundled with: {_app.IsBundledWith}"
-                             : "direct download";
+                             : (!string.IsNullOrEmpty(_app.DirectUrl) && !string.IsNullOrEmpty(_app.FileName))
+                                 ? "direct download"
+                                 : "⚠ no install method configured yet";
             string tipText = $"{app.Description}\n\n{tipMethod}";
-            var tip = new ToolTip { AutoPopDelay = 8000, InitialDelay = 600, ReshowDelay = 300, ShowAlways = true };
-            tip.SetToolTip(this,        tipText);
-            tip.SetToolTip(iconLbl,     tipText);
-            tip.SetToolTip(nameLbl,     tipText);
-            tip.SetToolTip(descLbl,     tipText);
-            tip.SetToolTip(methodBadge, tipText);
+            _sharedTip.SetToolTip(this,        tipText);
+            _sharedTip.SetToolTip(iconLbl,     tipText);
+            _sharedTip.SetToolTip(nameLbl,     tipText);
+            _sharedTip.SetToolTip(descLbl,     tipText);
+            _sharedTip.SetToolTip(methodBadge, tipText);
         }
 
         // ── Version picker toggle ─────────────────────────────────────────────

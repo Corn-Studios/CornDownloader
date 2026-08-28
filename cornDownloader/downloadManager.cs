@@ -74,7 +74,14 @@ namespace CornDownloader
                     CreateNoWindow         = true
                 };
                 using var proc = Process.Start(psi);
-                await Task.Run(() => proc.WaitForExit(30_000)); // 30s timeout
+                bool exited = await Task.Run(() => proc.WaitForExit(30_000)); // 30s timeout
+                if (!exited)
+                {
+                    // Don't leave an orphaned winget process running — it can hold the
+                    // source lock and cause "another WinGet process is running" errors
+                    // on the very next call this app makes.
+                    try { proc.Kill(true); } catch { }
+                }
             }
             catch { }
         }
@@ -111,6 +118,13 @@ namespace CornDownloader
                 proc.BeginErrorReadLine();
 
                 await Task.WhenAny(tcs.Task, Task.Delay(20000));
+
+                if (!tcs.Task.IsCompleted)
+                {
+                    // Timed out — don't leave winget running in the background.
+                    try { if (!proc.HasExited) proc.Kill(true); } catch { }
+                }
+                try { proc.Dispose(); } catch { }
 
                 if (!File.Exists(tempFile)) return installed;
 
@@ -184,6 +198,13 @@ namespace CornDownloader
 
                 await Task.WhenAny(tcs.Task, Task.Delay(20000));
 
+                if (!tcs.Task.IsCompleted)
+                {
+                    // Timed out — don't leave winget running in the background.
+                    try { if (!proc.HasExited) proc.Kill(true); } catch { }
+                }
+                try { proc.Dispose(); } catch { }
+
                 // Strip non-ASCII chars and match catalog IDs
                 var clean = new System.Text.StringBuilder();
                 foreach (char c in output.ToString())
@@ -244,6 +265,13 @@ namespace CornDownloader
                 proc.BeginOutputReadLine();
                 proc.BeginErrorReadLine();
                 await Task.WhenAny(tcs.Task, Task.Delay(15_000));
+
+                if (!tcs.Task.IsCompleted)
+                {
+                    // Timed out — don't leave winget running in the background.
+                    try { if (!proc.HasExited) proc.Kill(true); } catch { }
+                }
+                try { proc.Dispose(); } catch { }
 
                 // winget --versions output looks like:
                 //   Version
@@ -463,7 +491,7 @@ namespace CornDownloader
         {
             // Set the user-agent once. Calling ParseAdd on every request throws if
             // the header already exists from a previous download.
-            _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("CornDownloader/1.1");
+            _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("CornDownloader/1.2");
         }
 
         private async Task<InstallResult> InstallViaDirectUrl(
@@ -509,13 +537,20 @@ namespace CornDownloader
 
                 string ext = Path.GetExtension(app.FileName).ToLowerInvariant();
 
+                // Most EXE installers accept the default flag set (NSIS-style /S plus a few
+                // common no-ops other installers just ignore), but some installer technologies
+                // (Inno Setup with different switches, Squirrel, custom bootstrappers) need
+                // their own. AppEntry.SilentArgs lets a catalog entry override the default.
+                const string defaultExeSilentArgs = "/S /silent /quiet /passive /norestart";
+                string exeSilentArgs = !string.IsNullOrEmpty(app.SilentArgs) ? app.SilentArgs : defaultExeSilentArgs;
+
                 var psi = ext == ".msi"
                     ? new ProcessStartInfo("msiexec", $"/i \"{destPath}\" /passive /norestart")
                     {
                         UseShellExecute = true,
                         Verb = "runas"
                     }
-                    : new ProcessStartInfo(destPath, "/S /silent /quiet /passive /norestart")
+                    : new ProcessStartInfo(destPath, exeSilentArgs)
                     {
                         UseShellExecute = true,
                         Verb = "runas"
